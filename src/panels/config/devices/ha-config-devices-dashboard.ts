@@ -58,6 +58,7 @@ import {
   deserializeFilters,
   serializeFilters,
 } from "../../../data/data_table_filters";
+import { UrlFiltersController } from "../../../data/url-filters-controller";
 import type {
   DeviceEntityLookup,
   DeviceRegistryEntry,
@@ -188,6 +189,14 @@ export class HaConfigDeviceDashboard extends LitElement {
 
   private _ignoreLocationChange = false;
 
+  private _urlFilters = new UrlFiltersController<DataTableFilters>(
+    this,
+    () => this._filters,
+    (f) => {
+      this._filters = f;
+    }
+  );
+
   public connectedCallback() {
     super.connectedCallback();
     window.addEventListener("location-changed", this._locationChanged);
@@ -253,6 +262,7 @@ export class HaConfigDeviceDashboard extends LitElement {
       return;
     }
 
+    this._urlFilters.saveBeforeUrlFilters();
     this._filter = history.state?.filter || "";
 
     this._filters = {
