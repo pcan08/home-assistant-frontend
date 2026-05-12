@@ -24,6 +24,10 @@ export class HaListSelectable extends HaListBase {
 
   private _selectedIndices?: Set<number>;
 
+  // Guard to avoid running the initialisation branch more than once while
+  // items are still registering within the same render cycle.
+  private _initPending = false;
+
   public connectedCallback(): void {
     super.connectedCallback();
     this.addEventListener("click", this._onOptionClick);
@@ -130,13 +134,28 @@ export class HaListSelectable extends HaListBase {
 
   private _syncItemSelectedState() {
     if (!this._selectedIndices) {
-      this._selectedIndices = new Set<number>();
-      this.items.forEach((item, i) => {
-        const opt = item as HaListItemOption;
-        if (opt.selected) {
-          this._selectedIndices!.add(i);
-        }
-      });
+      // Items register one-by-one via connectedCallback within a single
+      // render cycle. Reading their .selected values immediately would only
+      // see the items registered so far, causing later ones to have their
+      // Lit-set .selected overwritten to false in branch 2.
+      // Defer initialisation to a microtask so the full item list is
+      // available when we scan it.
+      if (!this._initPending) {
+        this._initPending = true;
+        Promise.resolve().then(() => {
+          this._initPending = false;
+          // If _setSelection() was already called in the meantime, skip.
+          if (this._selectedIndices) {
+            return;
+          }
+          this._selectedIndices = new Set<number>();
+          this.items.forEach((item, i) => {
+            if ((item as HaListItemOption).selected) {
+              this._selectedIndices!.add(i);
+            }
+          });
+        });
+      }
       return;
     }
 
@@ -150,7 +169,7 @@ export class HaListSelectable extends HaListBase {
   }
 
   private _setSelection(next: Set<number>): void {
-    const prev = this._selectedIndices!;
+    const prev = this._selectedIndices ?? new Set<number>();
     const added = new Set<number>();
     const removed = new Set<number>();
     next.forEach((i) => {
