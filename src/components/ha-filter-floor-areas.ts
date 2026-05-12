@@ -81,6 +81,10 @@ export class HaFilterFloorAreas extends LitElement {
               <ha-list-selectable
                 class="ha-scrollbar"
                 multi
+                .value=${[
+                  ...(this.value?.floors ?? []),
+                  ...(this.value?.areas ?? []),
+                ]}
                 @ha-list-selected=${this._handleListChanged}
                 aria-label=${this.hass.localize(
                   "ui.panel.config.areas.caption"
@@ -95,9 +99,6 @@ export class HaFilterFloorAreas extends LitElement {
                       selection-position="end"
                       .value=${floor.floor_id}
                       .type=${"floors"}
-                      .selected=${this.value?.floors?.includes(
-                        floor.floor_id
-                      ) || false}
                     >
                       <ha-floor-icon
                         slot="start"
@@ -134,7 +135,6 @@ export class HaFilterFloorAreas extends LitElement {
         appearance="checkbox"
         selection-position="end"
         .value=${area.area_id}
-        .selected=${this.value?.areas?.includes(area.area_id) || false}
         .type=${"areas"}
         class=${classMap({
           rtl: computeRTL(

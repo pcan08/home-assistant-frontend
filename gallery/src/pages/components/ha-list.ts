@@ -20,7 +20,7 @@ import "../../../../src/components/item/ha-list-item-option";
 import "../../../../src/components/list/ha-list-base";
 import "../../../../src/components/list/ha-list-nav";
 import "../../../../src/components/list/ha-list-selectable";
-import type { HaListSelectedDetail } from "../../../../src/components/list/types";
+import type { HaListSelectable } from "../../../../src/components/list/ha-list-selectable";
 
 type Appearance = "line" | "checkbox";
 type Position = "start" | "end";
@@ -34,13 +34,13 @@ const disabledStates = [false, true];
 export class DemoHaList extends LitElement {
   @state() private _buttonClicks = 0;
 
-  @state() private _single: number | Set<number> = -1;
+  @state() private _single: string[] = [];
 
-  @state() private _multiLine: number | Set<number> = new Set();
+  @state() private _multiLine: string[] = [];
 
-  @state() private _multiCheckStart: number | Set<number> = new Set();
+  @state() private _multiCheckStart: string[] = [];
 
-  @state() private _multiCheckEnd: number | Set<number> = new Set();
+  @state() private _multiCheckEnd: string[] = [];
 
   private _options = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"];
 
@@ -185,40 +185,36 @@ export class DemoHaList extends LitElement {
       <ha-card header="Single select, appearance=line">
         <ha-list-selectable
           aria-label="Single select"
+          .value=${this._single}
           @ha-list-selected=${this._onSingle}
         >
           ${this._options.map(
-            (o, i) => html`
-              <ha-list-item-option
-                .value=${o}
-                ?selected=${this._isSel(this._single, i)}
-              >
+            (o) => html`
+              <ha-list-item-option .value=${o}>
                 <span slot="headline">${o}</span>
               </ha-list-item-option>
             `
           )}
         </ha-list-selectable>
-        <pre>selected: ${JSON.stringify(this._toJson(this._single))}</pre>
+        <pre>selected: ${JSON.stringify(this._single)}</pre>
       </ha-card>
 
       <ha-card header="Multi select, appearance=line">
         <ha-list-selectable
           multi
           aria-label="Multi select line"
+          .value=${this._multiLine}
           @ha-list-selected=${this._onMultiLine}
         >
           ${this._options.map(
-            (o, i) => html`
-              <ha-list-item-option
-                .value=${o}
-                ?selected=${this._isSel(this._multiLine, i)}
-              >
+            (o) => html`
+              <ha-list-item-option .value=${o}>
                 <span slot="headline">${o}</span>
               </ha-list-item-option>
             `
           )}
         </ha-list-selectable>
-        <pre>selected: ${JSON.stringify(this._toJson(this._multiLine))}</pre>
+        <pre>selected: ${JSON.stringify(this._multiLine)}</pre>
       </ha-card>
 
       <ha-card
@@ -227,24 +223,22 @@ export class DemoHaList extends LitElement {
         <ha-list-selectable
           multi
           aria-label="Multi checkbox start"
+          .value=${this._multiCheckStart}
           @ha-list-selected=${this._onMultiCheckStart}
         >
           ${this._options.map(
-            (o, i) => html`
+            (o) => html`
               <ha-list-item-option
                 appearance="checkbox"
                 selection-position="start"
                 .value=${o}
-                ?selected=${this._isSel(this._multiCheckStart, i)}
               >
                 <span slot="headline">${o}</span>
               </ha-list-item-option>
             `
           )}
         </ha-list-selectable>
-        <pre>
-selected: ${JSON.stringify(this._toJson(this._multiCheckStart))}</pre
-        >
+        <pre>selected: ${JSON.stringify(this._multiCheckStart)}</pre>
       </ha-card>
 
       <ha-card
@@ -253,15 +247,15 @@ selected: ${JSON.stringify(this._toJson(this._multiCheckStart))}</pre
         <ha-list-selectable
           multi
           aria-label="Multi checkbox end"
+          .value=${this._multiCheckEnd}
           @ha-list-selected=${this._onMultiCheckEnd}
         >
           ${this._options.map(
-            (o, i) => html`
+            (o) => html`
               <ha-list-item-option
                 appearance="checkbox"
                 selection-position="end"
                 .value=${o}
-                ?selected=${this._isSel(this._multiCheckEnd, i)}
               >
                 <span slot="headline">${o}</span>
                 <span slot="supporting-text">${o.length} characters</span>
@@ -269,9 +263,7 @@ selected: ${JSON.stringify(this._toJson(this._multiCheckStart))}</pre
             `
           )}
         </ha-list-selectable>
-        <pre>
-selected: ${JSON.stringify(this._toJson(this._multiCheckEnd))}</pre
-        >
+        <pre>selected: ${JSON.stringify(this._multiCheckEnd)}</pre>
       </ha-card>
 
       <ha-card header="Option: all combinations">
@@ -332,35 +324,24 @@ selected: ${JSON.stringify(this._toJson(this._multiCheckEnd))}</pre
     `;
   }
 
-  private _isSel(value: number | Set<number>, index: number): boolean {
-    if (typeof value === "number") {
-      return value === index;
-    }
-    return value.has(index);
-  }
-
-  private _toJson(value: number | Set<number>): unknown {
-    return value instanceof Set ? [...value] : value;
-  }
-
   private _onButtonClick = () => {
     this._buttonClicks++;
   };
 
-  private _onSingle = (ev: CustomEvent<HaListSelectedDetail>) => {
-    this._single = ev.detail.index;
+  private _onSingle = (ev: Event) => {
+    this._single = (ev.currentTarget as HaListSelectable).value;
   };
 
-  private _onMultiLine = (ev: CustomEvent<HaListSelectedDetail>) => {
-    this._multiLine = ev.detail.index;
+  private _onMultiLine = (ev: Event) => {
+    this._multiLine = (ev.currentTarget as HaListSelectable).value;
   };
 
-  private _onMultiCheckStart = (ev: CustomEvent<HaListSelectedDetail>) => {
-    this._multiCheckStart = ev.detail.index;
+  private _onMultiCheckStart = (ev: Event) => {
+    this._multiCheckStart = (ev.currentTarget as HaListSelectable).value;
   };
 
-  private _onMultiCheckEnd = (ev: CustomEvent<HaListSelectedDetail>) => {
-    this._multiCheckEnd = ev.detail.index;
+  private _onMultiCheckEnd = (ev: Event) => {
+    this._multiCheckEnd = (ev.currentTarget as HaListSelectable).value;
   };
 
   static styles = css`

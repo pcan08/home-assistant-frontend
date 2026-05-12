@@ -12,6 +12,11 @@ import type { HaListSelectedDetail } from "./types";
  * Selection list (role `listbox`). Items must be `<ha-list-item-option>`.
  * Toggle single vs multi selection via the `multi` attribute.
  *
+ * Selection is driven top-down via the `value` property (array of selected
+ * item values). Bind it from the parent to control initial and programmatic
+ * selection. The list keeps it in sync when the user interacts and fires
+ * `ha-list-selected` for each change.
+ *
  * @attr {boolean} multi - Whether multiple options can be selected at once.
  *
  * @fires ha-list-selected - Fired when the selection changes. `detail: HaListSelectedDetail`.
@@ -20,13 +25,16 @@ import type { HaListSelectedDetail } from "./types";
 export class HaListSelectable extends HaListBase {
   @property({ type: Boolean, reflect: true }) public multi = false;
 
+  /**
+   * The currently selected item values (matched against each item's `value`
+   * property). Set this from the parent to control selection; the list
+   * updates it automatically when the user interacts.
+   */
+  @property({ attribute: false }) public value: string[] = [];
+
   protected override readonly hostRole = "listbox";
 
-  private _selectedIndices?: Set<number>;
-
-  // Guard to avoid running the initialisation branch more than once while
-  // items are still registering within the same render cycle.
-  private _initPending = false;
+  private _selectedIndices = new Set<number>();
 
   public connectedCallback(): void {
     super.connectedCallback();
@@ -43,10 +51,13 @@ export class HaListSelectable extends HaListBase {
     super.updated(changed);
     if (changed.has("multi")) {
       this.setAttribute("aria-multiselectable", this.multi ? "true" : "false");
-      if (!this.multi && (this._selectedIndices?.size ?? 0) > 1) {
-        const first = Math.min(...this._selectedIndices!);
+      if (!this.multi && this._selectedIndices.size > 1) {
+        const first = Math.min(...this._selectedIndices);
         this._setSelection(new Set([first]));
       }
+    }
+    if (changed.has("value")) {
+      this._recomputeFromValue();
     }
   }
 
@@ -58,9 +69,9 @@ export class HaListSelectable extends HaListBase {
     if (this.multi) {
       return new Set(this._selectedIndices);
     }
-    return (this._selectedIndices?.size ?? 0) === 0
+    return this._selectedIndices.size === 0
       ? -1
-      : this._selectedIndices!.values().next().value!;
+      : this._selectedIndices.values().next().value!;
   }
 
   public get selectedItems(): HaListItemOption[] {
@@ -69,7 +80,7 @@ export class HaListSelectable extends HaListBase {
       .filter((it): it is HaListItemOption => !!it);
   }
 
-  /** Replace the entire selection. */
+  /** Replace the entire selection by index. */
   public setSelected(indices: number | number[] | Set<number>): void {
     const next =
       typeof indices === "number"
@@ -113,7 +124,7 @@ export class HaListSelectable extends HaListBase {
       }
       this._setSelection(next);
     } else {
-      const isSelected = this._selectedIndices!.has(index);
+      const isSelected = this._selectedIndices.has(index);
       const shouldSelect = force !== undefined ? force : !isSelected;
       this._setSelection(shouldSelect ? new Set([index]) : new Set());
     }
@@ -125,43 +136,37 @@ export class HaListSelectable extends HaListBase {
 
   public updateListItems() {
     super.updateListItems();
-    this._syncItemSelectedState();
+    this._recomputeFromValue();
   }
 
   private _sortedSelectedIndices(): number[] {
-    return [...this._selectedIndices!].sort((a, b) => a - b);
+    return [...this._selectedIndices].sort((a, b) => a - b);
   }
 
-  private _syncItemSelectedState() {
-    if (!this._selectedIndices) {
-      // Items register one-by-one via connectedCallback within a single
-      // render cycle. Reading their .selected values immediately would only
-      // see the items registered so far, causing later ones to have their
-      // Lit-set .selected overwritten to false in branch 2.
-      // Defer initialisation to a microtask so the full item list is
-      // available when we scan it.
-      if (!this._initPending) {
-        this._initPending = true;
-        Promise.resolve().then(() => {
-          this._initPending = false;
-          // If _setSelection() was already called in the meantime, skip.
-          if (this._selectedIndices) {
-            return;
-          }
-          this._selectedIndices = new Set<number>();
-          this.items.forEach((item, i) => {
-            if ((item as HaListItemOption).selected) {
-              this._selectedIndices!.add(i);
-            }
-          });
-        });
-      }
-      return;
-    }
-
+  /**
+   * Derive `_selectedIndices` from `this.value` by matching each item's
+   * `value` property. This is the single source of truth for selection state:
+   * the parent binds `value`, the list derives everything else from it.
+   */
+  private _recomputeFromValue() {
+    const next = new Set<number>();
     this.items.forEach((item, i) => {
       const opt = item as HaListItemOption;
-      const shouldBe = this._selectedIndices!.has(i);
+      if (opt.value !== undefined && this.value.includes(opt.value)) {
+        next.add(i);
+      }
+    });
+    if (!_setsEqual(next, this._selectedIndices)) {
+      this._selectedIndices = next;
+      this._syncItemSelectedState();
+    }
+  }
+
+  /** Push `_selectedIndices` down to item `.selected` properties. */
+  private _syncItemSelectedState() {
+    this.items.forEach((item, i) => {
+      const opt = item as HaListItemOption;
+      const shouldBe = this._selectedIndices.has(i);
       if (opt.selected !== shouldBe) {
         opt.selected = shouldBe;
       }
@@ -169,7 +174,7 @@ export class HaListSelectable extends HaListBase {
   }
 
   private _setSelection(next: Set<number>): void {
-    const prev = this._selectedIndices ?? new Set<number>();
+    const prev = this._selectedIndices;
     const added = new Set<number>();
     const removed = new Set<number>();
     next.forEach((i) => {
@@ -188,6 +193,11 @@ export class HaListSelectable extends HaListBase {
 
     this._selectedIndices = next;
     this._syncItemSelectedState();
+    // Keep this.value in sync so the parent can observe the new selection.
+    // _recomputeFromValue will detect no change and skip on the next updated().
+    this.value = this._sortedSelectedIndices()
+      .map((i) => (this.items[i] as HaListItemOption | undefined)?.value)
+      .filter((v): v is string => v !== undefined);
 
     const detail: HaListSelectedDetail = this.multi
       ? { index: new Set(next), diff: { added, removed } }
@@ -222,6 +232,14 @@ export class HaListSelectable extends HaListBase {
       }
     }
   };
+}
+
+function _setsEqual(a: Set<number>, b: Set<number>): boolean {
+  if (a.size !== b.size) return false;
+  for (const v of a) {
+    if (!b.has(v)) return false;
+  }
+  return true;
 }
 
 declare global {
