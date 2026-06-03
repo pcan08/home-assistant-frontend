@@ -63,19 +63,16 @@ export class HuiActionConfirmationEditor extends HuiElementEditor<
   }
 
   protected override renderConfigElement() {
-    const exemptionIds =
-      this.value?.exemptions?.map((e) => e.user) ?? [];
+    const exemptionIds = this.value?.exemptions?.map((e) => e.user) ?? [];
 
     return html`
       ${super.renderConfigElement()}
       <div class="exemptions">
-        <label>
-          ${this.hass.localize(
-            "ui.panel.lovelace.editor.action-editor.confirmation.exemptions"
-          )}
-        </label>
         <ha-users-picker
           .hass=${this.hass}
+          .label=${this.hass.localize(
+            "ui.panel.lovelace.editor.action-editor.confirmation.exemptions"
+          )}
           .value=${exemptionIds}
           @value-changed=${this._exemptionsChanged}
         ></ha-users-picker>
@@ -86,9 +83,7 @@ export class HuiActionConfirmationEditor extends HuiElementEditor<
   private _exemptionsChanged(ev: CustomEvent): void {
     ev.stopPropagation();
     const ids: string[] = ev.detail.value;
-    const exemptions = ids.length
-      ? ids.map((id) => ({ user: id }))
-      : undefined;
+    const exemptions = ids.length ? ids.map((id) => ({ user: id })) : undefined;
     this.value = { ...this.value, exemptions } as ConfirmationRestrictionConfig;
   }
 
@@ -97,12 +92,6 @@ export class HuiActionConfirmationEditor extends HuiElementEditor<
     css`
       .exemptions {
         margin-top: var(--ha-space-4);
-      }
-      label {
-        display: block;
-        font-size: var(--ha-font-size-s);
-        color: var(--secondary-text-color);
-        margin-bottom: var(--ha-space-1);
       }
     `,
   ];
