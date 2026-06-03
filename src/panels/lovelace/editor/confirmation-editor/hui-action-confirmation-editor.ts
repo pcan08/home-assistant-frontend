@@ -2,6 +2,7 @@ import { css, html } from "lit";
 import { customElement } from "lit/decorators";
 import "../../../../components/ha-alert";
 import type { HaFormSchema } from "../../../../components/ha-form/types";
+import "../../../../components/user/ha-users-picker";
 import type {
   ActionConfig,
   ConfirmationRestrictionConfig,
@@ -62,22 +63,46 @@ export class HuiActionConfirmationEditor extends HuiElementEditor<
   }
 
   protected override renderConfigElement() {
+    const exemptionIds =
+      this.value?.exemptions?.map((e) => e.user) ?? [];
+
     return html`
       ${super.renderConfigElement()}
-      <ha-alert alert-type="info">
-        ${this.hass?.localize(
-          "ui.panel.lovelace.editor.action-editor.confirmation.exemptions_hint"
-        )}
-      </ha-alert>
+      <div class="exemptions">
+        <label>
+          ${this.hass.localize(
+            "ui.panel.lovelace.editor.action-editor.confirmation.exemptions"
+          )}
+        </label>
+        <ha-users-picker
+          .hass=${this.hass}
+          .value=${exemptionIds}
+          @value-changed=${this._exemptionsChanged}
+        ></ha-users-picker>
+      </div>
     `;
+  }
+
+  private _exemptionsChanged(ev: CustomEvent): void {
+    ev.stopPropagation();
+    const ids: string[] = ev.detail.value;
+    const exemptions = ids.length
+      ? ids.map((id) => ({ user: id }))
+      : undefined;
+    this.value = { ...this.value, exemptions } as ConfirmationRestrictionConfig;
   }
 
   static override styles = [
     HuiElementEditor.styles,
     css`
-      ha-alert {
+      .exemptions {
+        margin-top: var(--ha-space-4);
+      }
+      label {
         display: block;
-        margin-top: var(--ha-space-2);
+        font-size: var(--ha-font-size-s);
+        color: var(--secondary-text-color);
+        margin-bottom: var(--ha-space-1);
       }
     `,
   ];
