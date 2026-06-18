@@ -6,6 +6,7 @@ import {
   LitElement,
   nothing,
   type CSSResultGroup,
+  type PropertyValues,
   type TemplateResult,
 } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
@@ -30,7 +31,54 @@ export type PickerValueRenderer = (value: string) => TemplateResult<1>;
 export class HaPickerField extends PickerMixin(LitElement) {
   @property({ type: Boolean, reflect: true }) public invalid = false;
 
+  @property({ reflect: true }) public appearance: "material" | "outlined" =
+    "material";
+
   @query("ha-combo-box-item", true) public item!: HaComboBoxItem;
+
+  private _appearanceExplicitlySet = false;
+
+  private _appearanceInitialized = false;
+
+  private _themeObserver?: MutationObserver;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (!this._appearanceInitialized) {
+      // Only check on first connect — before Lit's first render, only the parent
+      // can have set this attribute (Lit hasn't reflected the default yet)
+      this._appearanceExplicitlySet = this.hasAttribute("appearance");
+      this._appearanceInitialized = true;
+    }
+    if (!this._appearanceExplicitlySet) {
+      this._themeObserver = new MutationObserver(() =>
+        this._syncAppearance()
+      );
+      this._themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["style"],
+      });
+    }
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this._themeObserver?.disconnect();
+    this._themeObserver = undefined;
+  }
+
+  protected override firstUpdated(changedProperties: PropertyValues): void {
+    super.firstUpdated(changedProperties);
+    this._syncAppearance();
+  }
+
+  private _syncAppearance(): void {
+    if (this._appearanceExplicitlySet) return;
+    const val = getComputedStyle(document.documentElement)
+      .getPropertyValue("--ha-form-appearance")
+      .trim();
+    this.appearance = val === "outlined" ? "outlined" : "material";
+  }
 
   @state()
   @consume({ context: internationalizationContext, subscribe: true })
@@ -142,7 +190,7 @@ export class HaPickerField extends PickerMixin(LitElement) {
           --md-focus-ring-duration: 0s;
         }
 
-        ha-combo-box-item:after {
+        :host([appearance="material"]) ha-combo-box-item:after {
           display: block;
           content: "";
           position: absolute;
@@ -158,7 +206,7 @@ export class HaPickerField extends PickerMixin(LitElement) {
             background-color 180ms ease-in-out;
         }
 
-        ha-combo-box-item:focus:after {
+        :host([appearance="material"]) ha-combo-box-item:focus:after {
           height: 2px;
           background-color: var(--mdc-theme-primary);
         }
@@ -167,9 +215,29 @@ export class HaPickerField extends PickerMixin(LitElement) {
           background-color: var(--ha-color-fill-warning-quiet-resting);
         }
 
-        :host([invalid]) ha-combo-box-item:after {
+        :host([appearance="material"][invalid]) ha-combo-box-item:after {
           height: 2px;
           background-color: var(--mdc-theme-error, var(--error-color, #b00020));
+        }
+
+        /* Outlined appearance */
+        :host([appearance="outlined"]) ha-combo-box-item {
+          border: 1px solid var(--ha-color-border-neutral-quiet);
+          background-color: var(--card-background-color);
+          border-radius: var(--ha-border-radius-md);
+          border-end-end-radius: var(--ha-border-radius-md);
+          border-end-start-radius: var(--ha-border-radius-md);
+          transition: border-color var(--wa-transition-normal) ease-in-out;
+        }
+
+        :host([appearance="outlined"]) ha-combo-box-item:focus,
+        :host([appearance="outlined"].opened) ha-combo-box-item {
+          border-color: var(--primary-color);
+          outline: none;
+        }
+
+        :host([appearance="outlined"][invalid]) ha-combo-box-item {
+          border-color: var(--ha-color-border-danger-normal);
         }
 
         .clear {

@@ -80,8 +80,6 @@ export type InputType =
  */
 @customElement("ha-input")
 export class HaInput extends WaInputMixin(LitElement) {
-  @property({ reflect: true }) appearance: "material" | "outlined" = "material";
-
   @property({ reflect: true })
   public type: InputType = "text";
 

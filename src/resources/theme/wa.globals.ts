@@ -46,6 +46,9 @@ export const waMainStyles = css`
     --wa-form-control-border-width: var(--wa-border-width-s);
     --wa-form-control-height: 40px;
     --wa-form-control-padding-inline: var(--ha-space-3);
+
+    /* Global form field appearance: "material" (filled + underline) or "outlined" (all-around border) */
+    --ha-form-appearance: material;
   }
 
   ${scrollLockStyles}

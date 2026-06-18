@@ -222,7 +222,7 @@ export class HaTextArea extends WaInputMixin(LitElement) {
         padding-top: var(--ha-space-3);
       }
 
-      wa-textarea::part(base)::after {
+      :host([appearance="material"]) wa-textarea::part(base)::after {
         content: "";
         position: absolute;
         bottom: 0;
@@ -235,14 +235,14 @@ export class HaTextArea extends WaInputMixin(LitElement) {
           background-color var(--wa-transition-normal) ease-in-out;
       }
 
-      :host(:focus-within) wa-textarea::part(base)::after,
-      :host([focused]) wa-textarea::part(base)::after {
+      :host([appearance="material"]:focus-within) wa-textarea::part(base)::after,
+      :host([appearance="material"][focused]) wa-textarea::part(base)::after {
         height: 2px;
         background-color: var(--primary-color);
       }
 
-      :host(:focus-within) wa-textarea.invalid::part(base)::after,
-      wa-textarea.invalid:not([disabled])::part(base)::after {
+      :host([appearance="material"]:focus-within) wa-textarea.invalid::part(base)::after,
+      :host([appearance="material"]) wa-textarea.invalid:not([disabled])::part(base)::after {
         background-color: var(--ha-color-border-danger-normal);
       }
 
@@ -278,6 +278,28 @@ export class HaTextArea extends WaInputMixin(LitElement) {
       wa-textarea[disabled]::part(base),
       wa-textarea[disabled]::part(label) {
         background-color: var(--ha-color-form-background-disabled);
+      }
+
+      /* Outlined appearance */
+      :host([appearance="outlined"]) wa-textarea::part(base) {
+        border: 1px solid var(--ha-color-border-neutral-quiet);
+        background-color: var(--card-background-color);
+        border-radius: var(--ha-border-radius-md);
+        transition: border-color var(--wa-transition-normal) ease-in-out;
+      }
+
+      :host([appearance="outlined"]:focus-within) wa-textarea::part(base),
+      :host([appearance="outlined"][focused]) wa-textarea::part(base) {
+        border-color: var(--primary-color);
+      }
+
+      :host([appearance="outlined"]) wa-textarea.invalid:not([disabled])::part(base) {
+        border-color: var(--ha-color-border-danger-normal);
+      }
+
+      :host([appearance="outlined"]) wa-textarea:hover::part(base),
+      :host([appearance="outlined"]) wa-textarea:hover::part(label) {
+        background-color: var(--card-background-color);
       }
     `,
   ];

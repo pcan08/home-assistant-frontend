@@ -1,4 +1,4 @@
-import { type LitElement, css } from "lit";
+import { type LitElement, type PropertyValues, css } from "lit";
 import { property, state } from "lit/decorators";
 import memoizeOne from "memoize-one";
 import { nativeElementInternalsSupported } from "../../common/feature-detect/support-native-element-internals";
@@ -66,6 +66,7 @@ export interface WaInputMixinInterface {
     | "";
   name?: string;
   disabled: boolean;
+  appearance?: "material" | "outlined";
   validationMessage?: string;
   autoValidate: boolean;
   invalid: boolean;
@@ -177,6 +178,53 @@ export const WaInputMixin = <T extends Constructor<LitElement>>(
 
     @state()
     protected _invalid = false;
+
+    @property({ reflect: true }) appearance: "material" | "outlined" =
+      "material";
+
+    private _appearanceExplicitlySet = false;
+
+    private _appearanceInitialized = false;
+
+    private _themeObserver?: MutationObserver;
+
+    override connectedCallback(): void {
+      super.connectedCallback();
+      if (!this._appearanceInitialized) {
+        // Only check on first connect — before Lit's first render, only the parent
+        // can have set this attribute (Lit hasn't reflected the default yet)
+        this._appearanceExplicitlySet = this.hasAttribute("appearance");
+        this._appearanceInitialized = true;
+      }
+      if (!this._appearanceExplicitlySet) {
+        this._themeObserver = new MutationObserver(() =>
+          this._syncAppearance()
+        );
+        this._themeObserver.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ["style"],
+        });
+      }
+    }
+
+    override disconnectedCallback(): void {
+      super.disconnectedCallback();
+      this._themeObserver?.disconnect();
+      this._themeObserver = undefined;
+    }
+
+    protected override firstUpdated(props: PropertyValues): void {
+      super.firstUpdated(props);
+      this._syncAppearance();
+    }
+
+    private _syncAppearance(): void {
+      if (this._appearanceExplicitlySet) return;
+      const val = getComputedStyle(document.documentElement)
+        .getPropertyValue("--ha-form-appearance")
+        .trim();
+      this.appearance = val === "outlined" ? "outlined" : "material";
+    }
 
     static shadowRootOptions: ShadowRootInit = {
       mode: "open",

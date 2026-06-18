@@ -92,6 +92,45 @@ export class DemoHaTextarea extends LitElement {
                     placeholder="No label, autogrow"
                   ></ha-textarea>
                 </div>
+
+                <h3>Outlined</h3>
+                <div class="row">
+                  <ha-textarea
+                    appearance="outlined"
+                    label="Default"
+                  ></ha-textarea>
+                  <ha-textarea
+                    appearance="outlined"
+                    label="With value"
+                    value="Hello world"
+                  ></ha-textarea>
+                  <ha-textarea
+                    appearance="outlined"
+                    label="With placeholder"
+                    placeholder="Type here..."
+                  ></ha-textarea>
+                </div>
+                <div class="row">
+                  <ha-textarea
+                    appearance="outlined"
+                    label="Disabled"
+                    disabled
+                    value="Disabled"
+                  ></ha-textarea>
+                  <ha-textarea
+                    appearance="outlined"
+                    label="Readonly"
+                    readonly
+                    value="Readonly"
+                  ></ha-textarea>
+                  <ha-textarea
+                    appearance="outlined"
+                    label="Invalid"
+                    invalid
+                    validation-message="This field is required"
+                    value=""
+                  ></ha-textarea>
+                </div>
               </div>
             </ha-card>
           `
