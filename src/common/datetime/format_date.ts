@@ -119,6 +119,50 @@ const formatDateNumericMem = memoizeOne(
   }
 );
 
+// 10/8
+export const formatDateNumericDay = (
+  dateObj: Date,
+  locale: FrontendLocaleData,
+  config: HassConfig
+): string => {
+  if (
+    locale.date_format === DateFormat.language ||
+    locale.date_format === DateFormat.system
+  ) {
+    return formatDateNumericDayOnlyMem(locale, config.time_zone).format(
+      dateObj
+    );
+  }
+
+  const parts = formatDateNumericMem(locale, config.time_zone).formatToParts(
+    dateObj
+  );
+
+  const literal = parts.find((value) => value.type === "literal")?.value;
+  const day = parts.find((value) => value.type === "day")?.value;
+  const month = parts.find((value) => value.type === "month")?.value;
+
+  const formats = {
+    [DateFormat.DMY]: `${day}${literal}${month}`,
+    [DateFormat.MDY]: `${month}${literal}${day}`,
+    [DateFormat.YMD]: `${month}${literal}${day}`,
+  };
+
+  return formats[locale.date_format];
+};
+
+const formatDateNumericDayOnlyMem = memoizeOne(
+  (locale: FrontendLocaleData, serverTimeZone: string) => {
+    const localeString =
+      locale.date_format === DateFormat.system ? undefined : locale.language;
+    return new Intl.DateTimeFormat(localeString, {
+      month: "numeric",
+      day: "numeric",
+      timeZone: resolveTimeZone(locale.time_zone, serverTimeZone),
+    });
+  }
+);
+
 // Aug 10
 export const formatDateVeryShort = (
   dateObj: Date,

@@ -303,8 +303,14 @@ class HuiTemperatureForecastCardFeature
       <div class=${containerClasses}>
         <div class="bars">${this._renderBars(entries, customColor)}</div>
         ${
-          this._showLabels && this._locale
-            ? renderDayLabels(entries, entriesPerDay, this._locale)
+          this._showLabels && this._locale && this._hassConfig
+            ? renderDayLabels(
+                entries,
+                entriesPerDay,
+                this._config.day_label_format ?? "weekday",
+                this._locale,
+                this._hassConfig
+              )
             : nothing
         }
       </div>

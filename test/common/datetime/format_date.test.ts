@@ -4,6 +4,7 @@ import {
   formatDateWeekdayDay,
   formatDateShort,
   formatDateNumeric,
+  formatDateNumericDay,
   formatDateVeryShort,
   formatDateMonthYear,
   formatDateMonth,
@@ -147,6 +148,76 @@ describe("formatDate", () => {
           demoConfig
         )
       ).toBe("2017/11/18");
+    });
+  });
+
+  describe("formatDateNumericDay", () => {
+    it("Formats numeric day/month without year", () => {
+      expect(
+        formatDateNumericDay(
+          dateObj,
+          {
+            language: "de",
+            number_format: NumberFormat.language,
+            time_format: TimeFormat.language,
+            date_format: DateFormat.language,
+            time_zone: TimeZone.local,
+            first_weekday: FirstWeekday.language,
+          },
+          demoConfig
+        )
+      ).toBe("18.11.");
+    });
+
+    it("Formats numeric day/month in DMY format", () => {
+      expect(
+        formatDateNumericDay(
+          dateObj,
+          {
+            language: "en",
+            number_format: NumberFormat.language,
+            time_format: TimeFormat.language,
+            date_format: DateFormat.DMY,
+            time_zone: TimeZone.local,
+            first_weekday: FirstWeekday.language,
+          },
+          demoConfig
+        )
+      ).toBe("18/11");
+    });
+
+    it("Formats numeric day/month in MDY format", () => {
+      expect(
+        formatDateNumericDay(
+          dateObj,
+          {
+            language: "en",
+            number_format: NumberFormat.language,
+            time_format: TimeFormat.language,
+            date_format: DateFormat.MDY,
+            time_zone: TimeZone.local,
+            first_weekday: FirstWeekday.language,
+          },
+          demoConfig
+        )
+      ).toBe("11/18");
+    });
+
+    it("Formats numeric day/month in YMD format", () => {
+      expect(
+        formatDateNumericDay(
+          dateObj,
+          {
+            language: "en",
+            number_format: NumberFormat.language,
+            time_format: TimeFormat.language,
+            date_format: DateFormat.YMD,
+            time_zone: TimeZone.local,
+            first_weekday: FirstWeekday.language,
+          },
+          demoConfig
+        )
+      ).toBe("11/18");
     });
   });
 

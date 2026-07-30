@@ -306,8 +306,14 @@ class HuiPrecipitationForecastCardFeature
           ${this._renderDailyBars(entries, precipitationType, fill)}
         </div>
         ${
-          this._showLabels && this._locale
-            ? renderDayLabels(entries, entriesPerDay, this._locale)
+          this._showLabels && this._locale && this._hassConfig
+            ? renderDayLabels(
+                entries,
+                entriesPerDay,
+                this._config.day_label_format ?? "weekday",
+                this._locale,
+                this._hassConfig
+              )
             : nothing
         }
       </div>

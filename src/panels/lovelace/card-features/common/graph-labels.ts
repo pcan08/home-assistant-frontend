@@ -2,8 +2,11 @@ import type { CSSResultGroup, TemplateResult } from "lit";
 import { css, html, nothing } from "lit";
 import { styleMap } from "lit/directives/style-map";
 import memoizeOne from "memoize-one";
+import type { HassConfig } from "home-assistant-js-websocket";
 import { useAmPm } from "../../../../common/datetime/use_am_pm";
 import type { FrontendLocaleData } from "../../../../data/translation";
+import { formatDateNumericDay } from "../../../../common/datetime/format_date";
+import type { DayLabelFormat } from "../types";
 import { MS_PER_HOUR } from "./forecast";
 
 export const LABEL_HEIGHT = 10;
@@ -21,16 +24,35 @@ const hourFormatter = memoizeOne(
     })
 );
 
+export const computeDayLabels = (
+  entries: { datetime: string }[],
+  step: number,
+  format: DayLabelFormat,
+  locale: FrontendLocaleData,
+  config: HassConfig
+): string[] => {
+  const weekdayFormatter =
+    format === "weekday" ? narrowWeekdayFormatter(locale.language) : undefined;
+  const labels: string[] = [];
+  for (let i = 0; i < entries.length; i += step) {
+    const date = new Date(entries[i].datetime);
+    labels.push(
+      weekdayFormatter
+        ? weekdayFormatter.format(date)
+        : formatDateNumericDay(date, locale, config)
+    );
+  }
+  return labels;
+};
+
 export const renderDayLabels = (
   entries: { datetime: string }[],
   step: number,
-  locale: FrontendLocaleData
+  format: DayLabelFormat,
+  locale: FrontendLocaleData,
+  config: HassConfig
 ): TemplateResult => {
-  const formatter = narrowWeekdayFormatter(locale.language);
-  const labels: string[] = [];
-  for (let i = 0; i < entries.length; i += step) {
-    labels.push(formatter.format(new Date(entries[i].datetime)));
-  }
+  const labels = computeDayLabels(entries, step, format, locale, config);
   return html`
     <div class="day-labels">
       ${labels.map((label) => html`<div class="day-label">${label}</div>`)}
@@ -113,6 +135,7 @@ export const graphLabelsStyles: CSSResultGroup = css`
   .day-label {
     flex: 1;
     text-align: center;
+    white-space: nowrap;
   }
 
   .hour-slot-labels {

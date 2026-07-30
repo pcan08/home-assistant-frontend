@@ -255,6 +255,8 @@ export interface TrendGraphCardFeatureConfig {
 
 export type ForecastResolution = "daily" | "twice_daily" | "hourly";
 
+export type DayLabelFormat = "weekday" | "date";
+
 export interface TemperatureForecastCardFeatureConfig {
   type: "temperature-forecast";
   forecast_type?: ForecastResolution;
@@ -262,6 +264,7 @@ export interface TemperatureForecastCardFeatureConfig {
   hours_to_show?: number;
   color?: string;
   show_labels?: boolean;
+  day_label_format?: DayLabelFormat;
 }
 
 export interface PrecipitationForecastCardFeatureConfig {
@@ -272,6 +275,7 @@ export interface PrecipitationForecastCardFeatureConfig {
   precipitation_type?: ForecastPrecipitationType;
   color?: string;
   show_labels?: boolean;
+  day_label_format?: DayLabelFormat;
 }
 
 export const AREA_CONTROL_DOMAINS = [

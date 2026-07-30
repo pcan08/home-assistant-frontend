@@ -92,6 +92,25 @@ export class HuiTemperatureForecastCardFeatureEditor
           default: true,
           selector: { boolean: {} },
         },
+        {
+          name: "day_label_format",
+          default: "weekday",
+          visible: [
+            { field: "show_labels", operator: "not_eq", value: false },
+            { field: "forecast_type", operator: "not_eq", value: "hourly" },
+          ],
+          selector: {
+            select: {
+              mode: "dropdown",
+              options: (["weekday", "date"] as const).map((value) => ({
+                value,
+                label: localize(
+                  `ui.panel.lovelace.editor.features.types.temperature-forecast.day_label_format_options.${value}`
+                ),
+              })),
+            },
+          },
+        },
       ] as const satisfies readonly HaFormSchema[];
     }
   );
@@ -154,6 +173,10 @@ export class HuiTemperatureForecastCardFeatureEditor
       case "show_labels":
         return this.hass!.localize(
           "ui.panel.lovelace.editor.features.types.temperature-forecast.show_labels"
+        );
+      case "day_label_format":
+        return this.hass!.localize(
+          "ui.panel.lovelace.editor.features.types.temperature-forecast.day_label_format"
         );
       default:
         return "";

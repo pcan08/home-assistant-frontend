@@ -10812,7 +10812,12 @@
                   "hourly": "Hourly"
                 },
                 "color": "Color",
-                "show_labels": "Show labels"
+                "show_labels": "Show labels",
+                "day_label_format": "Day label format",
+                "day_label_format_options": {
+                  "weekday": "Weekday",
+                  "date": "Date"
+                }
               },
               "precipitation-forecast": {
                 "label": "Precipitation forecast",
@@ -10830,7 +10835,12 @@
                   "probability": "Probability"
                 },
                 "color": "[%key:ui::panel::lovelace::editor::features::types::temperature-forecast::color%]",
-                "show_labels": "[%key:ui::panel::lovelace::editor::features::types::temperature-forecast::show_labels%]"
+                "show_labels": "[%key:ui::panel::lovelace::editor::features::types::temperature-forecast::show_labels%]",
+                "day_label_format": "[%key:ui::panel::lovelace::editor::features::types::temperature-forecast::day_label_format%]",
+                "day_label_format_options": {
+                  "weekday": "[%key:ui::panel::lovelace::editor::features::types::temperature-forecast::day_label_format_options::weekday%]",
+                  "date": "[%key:ui::panel::lovelace::editor::features::types::temperature-forecast::day_label_format_options::date%]"
+                }
               }
             }
           },
