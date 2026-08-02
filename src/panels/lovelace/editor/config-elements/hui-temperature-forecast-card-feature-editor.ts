@@ -94,6 +94,7 @@ export class HuiTemperatureForecastCardFeatureEditor
         },
         {
           name: "day_label_format",
+          required: true,
           default: "weekday",
           visible: [
             { field: "show_labels", operator: "not_eq", value: false },
@@ -131,6 +132,7 @@ export class HuiTemperatureForecastCardFeatureEditor
     const data: TemperatureForecastCardFeatureConfig = {
       ...this._config,
       forecast_type: resolvedType,
+      day_label_format: this._config.day_label_format ?? "weekday",
       ...(isHourly
         ? { hours_to_show: this._config.hours_to_show ?? DEFAULT_HOURS_TO_SHOW }
         : { days_to_show: this._config.days_to_show ?? DEFAULT_DAYS_TO_SHOW }),
