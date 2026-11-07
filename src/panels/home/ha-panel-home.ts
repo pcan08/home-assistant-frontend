@@ -193,7 +193,7 @@ class PanelHome extends SubscribeMixin(LitElement) {
 
     // Locale changed: regenerate to refresh translated content
     if (oldHass.localize !== this.hass.localize) {
-      // A pending preview debounce would otherwise still fire later and
+      // A pending registry debounce would otherwise still fire later and
       // trigger a redundant second regeneration on top of this one.
       this._debounceRegenerateStrategy.cancel();
       this._setLovelace();
@@ -349,11 +349,11 @@ class PanelHome extends SubscribeMixin(LitElement) {
       return;
     }
     this._session = session.withDraft(ev.detail.value);
-    // Invalidate any in-flight _setLovelace() call synchronously: without
-    // this, a stale generation started before this edit could still resolve
-    // and be applied before the debounced regeneration below even starts.
-    this._lovelaceGeneration++;
-    this._debounceRegenerateStrategy();
+    // Preview at once: the debounce only batches registry updates, and
+    // regenerating now also covers one still pending. _setLovelace()
+    // invalidates any older in-flight generation synchronously.
+    this._debounceRegenerateStrategy.cancel();
+    this._setLovelace();
   }
 
   private _cancelSettings(): void {
@@ -693,8 +693,8 @@ class PanelHome extends SubscribeMixin(LitElement) {
     showToast(this, {
       message: this.hass.localize("ui.common.successfully_saved"),
     });
-    // An edit made just before Save may still have a debounced
-    // regeneration pending; the immediate refresh below already covers it.
+    // A registry change may still have a debounced regeneration pending;
+    // the immediate refresh below already covers it.
     this._debounceRegenerateStrategy.cancel();
     this._setLovelace();
     return true;

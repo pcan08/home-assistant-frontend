@@ -105,6 +105,13 @@ const changeDraft = (el: TestPanelHome, patch: Partial<EditorState>) =>
 
 const cancelSettings = (el: TestPanelHome) => priv(el)._cancelSettings();
 
+// A registry the strategy depends on changes, as willUpdate() sees it.
+const changeAreaRegistry = (el: TestPanelHome) => {
+  const oldHass = el.hass;
+  el.hass = { ...oldHass, areas: { ...oldHass.areas } };
+  el.willUpdate(new Map([["hass", oldHass]]));
+};
+
 const saveSettings = (el: TestPanelHome): Promise<void> =>
   priv(el)._saveSettings();
 
@@ -135,8 +142,8 @@ const deferred = <T>() => {
 
 describe("ha-panel-home settings editing", () => {
   beforeEach(() => {
-    // Draft edits schedule a real 200ms debounce. Fake timers keep it from
-    // firing on its own, so each test decides when it runs.
+    // Registry changes schedule a real 200ms debounce. Fake timers keep it
+    // from firing on its own, so each test decides when it runs.
     vi.useFakeTimers();
     mockedGenerateLovelaceDashboardStrategy.mockReset();
     mockedGenerateLovelaceDashboardStrategy.mockResolvedValue({
@@ -191,19 +198,47 @@ describe("ha-panel-home settings editing", () => {
     expect(mockedGenerateLovelaceDashboardStrategy).not.toHaveBeenCalled();
   });
 
-  it("previews each draft edit once, after the debounce", async () => {
+  it("previews each draft edit once, without waiting", async () => {
     const el = createPanel();
     editHome(el);
 
     changeDraft(el, { show_welcome_message: false });
-    expect(mockedGenerateLovelaceDashboardStrategy).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(200);
     expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenCalledTimes(1);
     expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenLastCalledWith(
       homeStrategy({ hide_welcome_message: true }),
       el.hass
     );
+
+    await vi.advanceTimersByTimeAsync(200);
+    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenCalledTimes(1);
+  });
+
+  it("still debounces a burst of registry changes", async () => {
+    const el = createPanel();
+    el.hasUpdated = true;
+
+    changeAreaRegistry(el);
+    await vi.advanceTimersByTimeAsync(100);
+    changeAreaRegistry(el);
+    await vi.advanceTimersByTimeAsync(199);
+    expect(mockedGenerateLovelaceDashboardStrategy).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenCalledTimes(1);
+  });
+
+  it("covers a pending registry regeneration with the edit's preview", async () => {
+    const el = createPanel();
+    el.hasUpdated = true;
+    editHome(el);
+
+    changeAreaRegistry(el);
+    changeDraft(el, { show_welcome_message: false });
+    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenCalledTimes(1);
+
+    // The registry debounce must not add a second regeneration later.
+    await vi.advanceTimersByTimeAsync(200);
+    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenCalledTimes(1);
   });
 
   it("ignores an edit that does not change the draft's meaning", async () => {
@@ -243,8 +278,8 @@ describe("ha-panel-home settings editing", () => {
     const el = createPanel();
     editHome(el);
     changeDraft(el, { show_welcome_message: false });
+    mockedGenerateLovelaceDashboardStrategy.mockClear();
 
-    // Cancelled before the edit's debounced regeneration fires
     cancelSettings(el);
     await vi.advanceTimersByTimeAsync(200);
 
@@ -275,9 +310,8 @@ describe("ha-panel-home settings editing", () => {
     );
 
     editHome(el);
-    changeDraft(el, { show_welcome_message: false });
     // The edit's regeneration starts and takes a while.
-    await vi.advanceTimersByTimeAsync(200);
+    changeDraft(el, { show_welcome_message: false });
 
     cancelSettings(el);
     await vi.advanceTimersByTimeAsync(0);
@@ -294,13 +328,13 @@ describe("ha-panel-home settings editing", () => {
     const el = createPanel();
 
     const firstDraft = deferred<{ views: unknown[] }>();
-    mockedGenerateLovelaceDashboardStrategy.mockReturnValueOnce(
-      firstDraft.promise as any
-    );
+    const secondDraft = deferred<{ views: unknown[] }>();
+    mockedGenerateLovelaceDashboardStrategy
+      .mockReturnValueOnce(firstDraft.promise as any)
+      .mockReturnValueOnce(secondDraft.promise as any);
 
     editHome(el);
     changeDraft(el, { show_welcome_message: false });
-    await vi.advanceTimersByTimeAsync(200);
 
     // A second edit, before the first one's regeneration resolves
     changeDraft(el, { show_suggested_entities: false });
@@ -308,16 +342,17 @@ describe("ha-panel-home settings editing", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(el._lovelace).toBeUndefined();
 
-    await vi.advanceTimersByTimeAsync(200);
-    expect(el._lovelace?.config).toEqual({ views: [] });
+    secondDraft.resolve({ views: ["second draft"] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(el._lovelace?.config).toEqual({ views: ["second draft"] });
   });
 
   it("saves the draft, closes and regenerates only once", async () => {
     const el = createPanel({ welcome_banner_dismissed: true });
     mockedSaveFrontendSystemData.mockResolvedValueOnce(undefined);
     editHome(el);
-    // Saved before the edit's debounced regeneration fires
     changeDraft(el, { show_welcome_message: false });
+    mockedGenerateLovelaceDashboardStrategy.mockClear();
 
     await saveSettings(el);
     await vi.advanceTimersByTimeAsync(200);
@@ -401,13 +436,12 @@ describe("ha-panel-home settings editing", () => {
     );
   });
 
-  it("cancels a pending draft debounce before a locale-driven regeneration", async () => {
+  it("cancels a pending registry debounce before a locale-driven regeneration", async () => {
     const el = createPanel();
-    (el as unknown as Record<"hasUpdated", boolean>).hasUpdated = true;
-    editHome(el);
+    el.hasUpdated = true;
 
-    // An edit schedules the 200ms debounce...
-    changeDraft(el, { show_welcome_message: false });
+    // A registry change schedules the 200ms debounce...
+    changeAreaRegistry(el);
 
     // ...but the locale changes before it fires.
     const oldHass = el.hass;
