@@ -8,6 +8,7 @@ import { fireEvent } from "../../../common/dom/fire_event";
 import "../../../components/ha-button";
 import "../../../components/ha-icon-button";
 import "../../../components/ha-snap-bottom-sheet";
+import type { HaSnapBottomSheet } from "../../../components/ha-snap-bottom-sheet";
 import { internationalizationContext } from "../../../data/context";
 import { DirtyStateProviderMixin } from "../../../mixins/dirty-state-provider-mixin";
 
@@ -42,6 +43,8 @@ export class HomeSettingsSidebar extends DirtyStateProviderMixin()(LitElement) {
   private _i18n!: ContextType<typeof internationalizationContext>;
 
   @query(".container") private _container?: HTMLElement;
+
+  @query("ha-snap-bottom-sheet") private _sheet?: HaSnapBottomSheet;
 
   // The draft lives in the host, so this only reports it to block automatic
   // frontend reloads while it has unsaved changes.
@@ -115,6 +118,13 @@ export class HomeSettingsSidebar extends DirtyStateProviderMixin()(LitElement) {
 
   protected firstUpdated(changedProps: PropertyValues<this>): void {
     super.firstUpdated(changedProps);
+    this._focusContainer();
+  }
+
+  private async _focusContainer(): Promise<void> {
+    // The bottom sheet's content cannot take the focus until its first
+    // render has shown it.
+    await this._sheet?.updateComplete;
     this._container?.focus({ preventScroll: true });
   }
 
@@ -126,7 +136,7 @@ export class HomeSettingsSidebar extends DirtyStateProviderMixin()(LitElement) {
       changedProps.has("narrow") &&
       changedProps.get("narrow") !== undefined
     ) {
-      this._container?.focus({ preventScroll: true });
+      this._focusContainer();
     }
   }
 

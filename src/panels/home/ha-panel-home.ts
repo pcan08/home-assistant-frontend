@@ -402,7 +402,10 @@ class PanelHome extends SubscribeMixin(LitElement) {
       opener.isConnected
     ) {
       opener.focus();
-      return;
+      // A menu item the settings were opened from is hidden by now.
+      if (deepActiveElement() === opener) {
+        return;
+      }
     }
     // Not focusable otherwise; -1 keeps it out of the tab order.
     this.tabIndex = -1;
