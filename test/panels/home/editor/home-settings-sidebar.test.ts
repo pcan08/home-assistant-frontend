@@ -13,6 +13,10 @@ for (const tag of ["ha-button", "ha-icon-button"]) {
   }
 }
 
+// jsdom has no Web Animations: the side panel's slide is done at once.
+if (!Element.prototype.getAnimations) {
+  Element.prototype.getAnimations = () => [];
+}
 const createSidebar = async (props: Partial<HomeSettingsSidebar> = {}) => {
   const el = document.createElement("home-settings-sidebar");
   (el as unknown as Record<"_i18n", unknown>)._i18n = createMockHass();

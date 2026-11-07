@@ -79,6 +79,9 @@ class PanelHome extends SubscribeMixin(LitElement) {
 
   @state() private _submitting = false;
 
+  // A closed session whose side panel is still sliding out
+  @state() private _closingSession?: HomeConfigDraftSession;
+
   @state() private _settingsSheetHeight?: number;
 
   @state() private _securityConfig: SecurityFrontendSystemData = {};
@@ -143,6 +146,8 @@ class PanelHome extends SubscribeMixin(LitElement) {
     if (!document.hidden) {
       this._closeSettings();
     }
+    // Nothing slides out of a page that is not shown.
+    this._closingSession = undefined;
   }
 
   private _bannerHeight = new ResizeController(this, {
@@ -317,6 +322,7 @@ class PanelHome extends SubscribeMixin(LitElement) {
       return;
     }
     this._settingsOpener = deepActiveElement();
+    this._closingSession = undefined;
     this._session = HomeConfigDraftSession.start(
       editorStateFromConfig(this._config ?? {})
     );
@@ -381,6 +387,12 @@ class PanelHome extends SubscribeMixin(LitElement) {
     }
     this._session = undefined;
     this._settingsSheetHeight = undefined;
+    // The side panel slides out while the dashboard widens back, unless
+    // nobody would see it. The bottom sheet just goes.
+    this._closingSession =
+      !this.narrow && this.isConnected && !document.hidden
+        ? session
+        : undefined;
     if (revertPreview && session.generation > 0) {
       this._debounceRegenerateStrategy.cancel();
       this._setLovelace();
@@ -410,6 +422,10 @@ class PanelHome extends SubscribeMixin(LitElement) {
     // Not focusable otherwise; -1 keeps it out of the tab order.
     this.tabIndex = -1;
     this.focus();
+  }
+
+  private _settingsClosed(): void {
+    this._closingSession = undefined;
   }
 
   private _settingsSheetResized(ev: HASSDomEvent<{ height: number }>): void {
@@ -476,6 +492,7 @@ class PanelHome extends SubscribeMixin(LitElement) {
     }
 
     const session = this._session;
+    const shownSession = session ?? this._closingSession;
     const sidePanel = session && !this.narrow;
     const settingsClasses = {
       "settings-start":
@@ -511,21 +528,24 @@ class PanelHome extends SubscribeMixin(LitElement) {
         style=${huiRootStyle}
       ></hui-root>
       ${
-        session
+        shownSession
           ? html`
               <home-settings-sidebar
+                ?inert=${!session}
+                .closing=${!session}
                 .narrow=${this.narrow}
                 .placement=${SETTINGS_PANEL_PLACEMENT}
-                .dirty=${session.isDirty}
+                .dirty=${session?.isDirty ?? false}
                 .submitting=${this._submitting}
                 @home-settings-cancel=${this._cancelSettings}
                 @home-settings-save=${this._saveSettings}
+                @home-settings-closed=${this._settingsClosed}
                 @bottom-sheet-resized=${this._settingsSheetResized}
               >
                 <home-settings-form
                   .hass=${this.hass}
-                  .draft=${session.draft}
-                  .disabled=${this._submitting}
+                  .draft=${shownSession.draft}
+                  .disabled=${this._submitting || !session}
                   @value-changed=${this._settingsChanged}
                 ></home-settings-form>
               </home-settings-sidebar>
@@ -677,6 +697,11 @@ class PanelHome extends SubscribeMixin(LitElement) {
     }
     hui-root.settings-start {
       --view-container-margin-inline-start: var(--home-settings-width);
+    }
+    .banner {
+      transition:
+        margin-inline-start var(--ha-animation-duration-normal) ease,
+        margin-inline-end var(--ha-animation-duration-normal) ease;
     }
     .banner.settings-end {
       margin-inline-end: var(--home-settings-width);

@@ -25,6 +25,8 @@ const COLLAPSED_SHEET_HEIGHT = 68;
  * @fires home-settings-cancel - Cancel, the close button, Escape on a clean
  * draft, or a swipe that dismisses the bottom sheet
  * @fires home-settings-save - Save
+ * @fires home-settings-closed - Once the panel has slid out after `closing`
+ * is set, or right away when `narrow`
  * @fires bottom-sheet-resized - Relayed from the bottom sheet when `narrow`
  */
 @customElement("home-settings-sidebar")
@@ -34,6 +36,9 @@ export class HomeSettingsSidebar extends DirtyStateProviderMixin()(LitElement) {
   @property({ type: Boolean }) public dirty = false;
 
   @property({ type: Boolean }) public submitting = false;
+
+  /** Slides the panel out; the host removes it on `home-settings-closed` */
+  @property({ type: Boolean, reflect: true }) public closing = false;
 
   /** The side of the dashboard the panel sits on, unless `narrow` */
   @property({ reflect: true }) public placement: HomeSettingsPlacement = "end";
@@ -116,9 +121,12 @@ export class HomeSettingsSidebar extends DirtyStateProviderMixin()(LitElement) {
     `;
   }
 
+  private _layoutTransitionActive = false;
+
   protected firstUpdated(changedProps: PropertyValues<this>): void {
     super.firstUpdated(changedProps);
     this._focusContainer();
+    this._slideDone();
   }
 
   private async _focusContainer(): Promise<void> {
@@ -128,8 +136,43 @@ export class HomeSettingsSidebar extends DirtyStateProviderMixin()(LitElement) {
     this._container?.focus({ preventScroll: true });
   }
 
+  public disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this._setLayoutTransition(false);
+  }
+
+  /**
+   * The dashboard resizes along with the slide: like the app sidebar, tell
+   * charts to hold their resizing until it ends.
+   */
+  private _setLayoutTransition(active: boolean): void {
+    if (this._layoutTransitionActive === active) {
+      return;
+    }
+    this._layoutTransitionActive = active;
+    fireEvent(window, "hass-layout-transition", {
+      active,
+      reason: "home-settings",
+    });
+  }
+
+  private async _slideDone(): Promise<void> {
+    const animations = this.narrow ? [] : this.getAnimations();
+    if (animations.length) {
+      this._setLayoutTransition(true);
+      await Promise.allSettled(animations.map((a) => a.finished));
+      this._setLayoutTransition(false);
+    }
+    if (this.closing) {
+      fireEvent(this, "home-settings-closed");
+    }
+  }
+
   protected updated(changedProps: PropertyValues<this>): void {
     super.updated(changedProps);
+    if (changedProps.has("closing") && this.closing) {
+      this._slideDone();
+    }
     // Switching between the panel and the bottom sheet re-creates the
     // container, which would otherwise drop the focus.
     if (
@@ -184,7 +227,10 @@ export class HomeSettingsSidebar extends DirtyStateProviderMixin()(LitElement) {
       background-color: var(--card-background-color);
       border-inline-start: 1px solid var(--divider-color);
       box-shadow: var(--ha-box-shadow-l);
-      animation: slide-in var(--ha-animation-duration-normal) ease-out;
+      animation: slide-in var(--ha-animation-duration-normal) ease;
+    }
+    :host(:not([narrow])[closing]) {
+      animation: slide-out var(--ha-animation-duration-normal) ease forwards;
     }
     :host(:not([narrow])[placement="start"]) {
       inset-inline-start: var(--ha-sidebar-width, 0px);
@@ -201,6 +247,11 @@ export class HomeSettingsSidebar extends DirtyStateProviderMixin()(LitElement) {
     }
     @keyframes slide-in {
       from {
+        transform: translateX(var(--home-settings-slide-from));
+      }
+    }
+    @keyframes slide-out {
+      to {
         transform: translateX(var(--home-settings-slide-from));
       }
     }
@@ -270,5 +321,6 @@ declare global {
   interface HASSDomEvents {
     "home-settings-cancel": undefined;
     "home-settings-save": undefined;
+    "home-settings-closed": undefined;
   }
 }

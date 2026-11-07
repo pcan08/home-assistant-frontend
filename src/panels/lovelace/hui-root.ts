@@ -1690,6 +1690,9 @@ class HUIRoot extends KeyboardShortcutMixin(LitElement) {
           /* Room for a panel the host lays out beside the view */
           margin-inline-start: var(--view-container-margin-inline-start, 0px);
           margin-inline-end: var(--view-container-margin-inline-end, 0px);
+          transition:
+            margin-inline-start var(--ha-animation-duration-normal) ease,
+            margin-inline-end var(--ha-animation-duration-normal) ease;
         }
         /* At least as high as the element it is embedded in, rather than the
            window, so that panel views fill it */

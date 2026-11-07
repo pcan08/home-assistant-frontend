@@ -31,6 +31,10 @@ for (const tag of ["ha-button", "ha-svg-icon", "home-settings-form"]) {
     customElements.define(tag, class extends HTMLElement {});
   }
 }
+// jsdom has no Web Animations: the side panel's slide is done at once.
+if (!Element.prototype.getAnimations) {
+  Element.prototype.getAnimations = () => [];
+}
 vi.stubGlobal(
   "ResizeObserver",
   class {
@@ -543,6 +547,35 @@ describe("home panel settings sidebar", () => {
     expect(window.isDirtyState).toBe(false);
   });
 
+  it("keeps the panel while it slides out, but not once the page is left", async () => {
+    mockedGenerateLovelaceDashboardStrategy.mockResolvedValue({
+      views: [],
+    } as any);
+    const panel = await openPanel(loadConfig);
+    await panel.updateComplete;
+    const el = panel as unknown as TestPanelHome;
+    const sidebar = () =>
+      panel.shadowRoot!.querySelector("home-settings-sidebar");
+
+    editHome(el);
+    await panel.updateComplete;
+    // A slide that is still running
+    const getAnimations = vi
+      .spyOn(Element.prototype, "getAnimations")
+      .mockReturnValue([{ finished: deferred<undefined>().promise }] as any);
+    cancelSettings(el);
+    await panel.updateComplete;
+    expect(sidebar()?.closing).toBe(true);
+    getAnimations.mockRestore();
+
+    // Left for another page, then back
+    const host = panel.parentElement!;
+    panel.remove();
+    host.append(panel);
+    await panel.updateComplete;
+    expect(sidebar()).toBeNull();
+  });
+
   it("disables the form while a save is in flight", async () => {
     mockedGenerateLovelaceDashboardStrategy.mockResolvedValue({
       views: [],
@@ -565,6 +598,8 @@ describe("home panel settings sidebar", () => {
 
     pending.resolve(undefined);
     await saving;
+    // Closing renders the sliding-out panel once, then removes it.
+    await panel.updateComplete;
     await panel.updateComplete;
     expect(form()).toBeNull();
   });
