@@ -7,6 +7,9 @@ import { provideHass } from "../../../src/fake_data/provide_hass";
 import { createMockHass } from "../../fixtures/hass";
 import "../../../src/panels/home/ha-panel-home";
 import { saveFrontendSystemData } from "../../../src/data/frontend";
+import { resolveShortcutItems } from "../../../src/data/home_shortcuts";
+import type { HomeConfigDraftSession } from "../../../src/panels/home/editor/home-config-draft-session";
+import type { EditorState } from "../../../src/panels/home/editor/home-config-editor-state";
 import { generateLovelaceDashboardStrategy } from "../../../src/panels/lovelace/strategies/get-strategy";
 
 // ha-panel-home transitively imports theme resources that reference
@@ -23,7 +26,7 @@ type HomePanel = HTMLElement & {
   [key: string]: unknown;
 };
 
-for (const tag of ["ha-button", "ha-svg-icon"]) {
+for (const tag of ["ha-button", "ha-svg-icon", "home-settings-form"]) {
   if (!customElements.get(tag)) {
     customElements.define(tag, class extends HTMLElement {});
   }
@@ -41,6 +44,8 @@ vi.stubGlobal(
 vi.mock("../../../src/components/ha-button", () => ({}));
 vi.mock("../../../src/components/ha-svg-icon", () => ({}));
 vi.mock("../../../src/panels/lovelace/hui-root", () => ({}));
+// The form's own behavior is not under test here, only what it receives.
+vi.mock("../../../src/panels/home/editor/home-settings-form", () => ({}));
 vi.mock("../../../src/panels/home/dialogs/show-dialog-new-overview", () => ({
   showNewOverviewDialog: vi.fn(),
 }));
@@ -78,51 +83,61 @@ interface TestPanelHome extends HTMLElement {
   willUpdate(changedProps: Map<string, unknown>): void;
 }
 
-const setPreviewConfig = (
-  el: TestPanelHome,
-  config: HomeFrontendSystemData | undefined
-) =>
-  (
-    el as unknown as Record<
-      "_setPreviewConfig",
-      (config: HomeFrontendSystemData | undefined) => void
-    >
-  )._setPreviewConfig(config);
+type Private = Record<string, any>;
 
-const setLovelace = (el: TestPanelHome) =>
-  (el as unknown as Record<"_setLovelace", () => Promise<void>>)._setLovelace();
+const priv = (el: TestPanelHome) => el as unknown as Private;
 
-const saveConfig = (el: TestPanelHome, config: HomeFrontendSystemData) =>
-  (
-    el as unknown as Record<
-      "_saveConfig",
-      (config: HomeFrontendSystemData) => Promise<boolean>
-    >
-  )._saveConfig(config);
+const setLovelace = (el: TestPanelHome): Promise<void> =>
+  priv(el)._setLovelace();
 
-const getPreviewConfig = (el: TestPanelHome) =>
-  (
-    el as unknown as Record<
-      "_previewConfig",
-      HomeFrontendSystemData | undefined
-    >
-  )._previewConfig;
+const editHome = (el: TestPanelHome) => priv(el)._editHome();
+
+const changeDraft = (el: TestPanelHome, patch: Partial<EditorState>) =>
+  priv(el)._settingsChanged(
+    new CustomEvent("value-changed", {
+      detail: { value: { ...priv(el)._session.draft, ...patch } },
+    })
+  );
+
+const cancelSettings = (el: TestPanelHome) => priv(el)._cancelSettings();
+
+const saveSettings = (el: TestPanelHome): Promise<void> =>
+  priv(el)._saveSettings();
+
+const session = (el: TestPanelHome): HomeConfigDraftSession | undefined =>
+  priv(el)._session;
+
+const homeStrategy = (config: HomeFrontendSystemData) => ({
+  strategy: {
+    type: "home",
+    alert_entities: undefined,
+    favorite_entities: config.favorite_entities,
+    home_panel: true,
+    hide_welcome_message: config.hide_welcome_message,
+    hide_suggested_entities: config.hide_suggested_entities,
+    shortcuts: config.shortcuts,
+  },
+});
 
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
     resolve = res;
+    reject = rej;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 };
 
-describe("ha-panel-home stale strategy regeneration guard", () => {
+describe("ha-panel-home settings editing", () => {
   beforeEach(() => {
-    // _setPreviewConfig() schedules a real 200ms debounce internally. Fake
-    // timers keep it from ever firing on its own, since every test here
-    // controls _setLovelace() timing explicitly instead.
+    // Draft edits schedule a real 200ms debounce. Fake timers keep it from
+    // firing on its own, so each test decides when it runs.
     vi.useFakeTimers();
     mockedGenerateLovelaceDashboardStrategy.mockReset();
+    mockedGenerateLovelaceDashboardStrategy.mockResolvedValue({
+      views: [],
+    } as any);
     mockedSaveFrontendSystemData.mockReset();
   });
 
@@ -131,11 +146,12 @@ describe("ha-panel-home stale strategy regeneration guard", () => {
     vi.useRealTimers();
   });
 
-  const createPanel = () => {
+  const createPanel = (config: HomeFrontendSystemData = {}) => {
     const el = document.createElement(
       "ha-panel-home"
     ) as unknown as TestPanelHome;
     el.hass = createMockHass();
+    priv(el)._config = config;
     return el;
   };
 
@@ -148,8 +164,8 @@ describe("ha-panel-home stale strategy regeneration guard", () => {
       .mockReturnValueOnce(older.promise as any)
       .mockReturnValueOnce(newer.promise as any);
 
-    // Two regenerations start back-to-back, with no preview change in
-    // between, simulating two _setLovelace() calls overlapping in flight.
+    // Two regenerations start back-to-back, simulating two _setLovelace()
+    // calls overlapping in flight.
     const olderCall = setLovelace(el);
     const newerCall = setLovelace(el);
 
@@ -163,217 +179,231 @@ describe("ha-panel-home stale strategy regeneration guard", () => {
     expect(el._lovelace?.config).toEqual({ views: ["newer"] });
   });
 
-  it("discards a draft generation that resolves after preview is cleared", async () => {
+  it("does not regenerate when the settings open", async () => {
     const el = createPanel();
+    editHome(el);
 
-    const staleGeneration = deferred<{ views: unknown[] }>();
-    mockedGenerateLovelaceDashboardStrategy.mockReturnValueOnce(
-      staleGeneration.promise as any
-    );
-
-    // An edit starts a draft regeneration that will take a while to resolve.
-    setPreviewConfig(el, { hide_welcome_message: true });
-    const inFlight = setLovelace(el);
-
-    // The user cancels before that regeneration resolves. This must
-    // invalidate it immediately, not just once the next debounced
-    // regeneration actually starts.
-    setPreviewConfig(el, undefined);
-
-    // The cancelled draft's request finally comes back.
-    staleGeneration.resolve({ views: [] });
-    await inFlight;
-
-    expect(el._lovelace).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(mockedGenerateLovelaceDashboardStrategy).not.toHaveBeenCalled();
   });
 
-  it("still applies a regeneration that starts after the previous one", async () => {
+  it("previews each draft edit once, after the debounce", async () => {
+    const el = createPanel();
+    editHome(el);
+
+    changeDraft(el, { show_welcome_message: false });
+    expect(mockedGenerateLovelaceDashboardStrategy).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(200);
+    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenCalledTimes(1);
+    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenLastCalledWith(
+      homeStrategy({ hide_welcome_message: true }),
+      el.hass
+    );
+  });
+
+  it("ignores an edit that does not change the draft's meaning", async () => {
+    const el = createPanel();
+    editHome(el);
+
+    // The shortcuts editor emits the full resolved list on its first change,
+    // which means the same as no stored shortcuts.
+    changeDraft(el, { shortcuts: resolveShortcutItems([]) });
+
+    expect(session(el)!.generation).toBe(0);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(mockedGenerateLovelaceDashboardStrategy).not.toHaveBeenCalled();
+  });
+
+  it("goes back to the saved config when closing after an edit undone", async () => {
+    const saved: HomeFrontendSystemData = { favorite_entities: ["light.a"] };
+    const el = createPanel(saved);
+    editHome(el);
+    changeDraft(el, { favorite_entities: ["light.a", "light.b"] });
+    changeDraft(el, { favorite_entities: ["light.a"] });
+    await vi.advanceTimersByTimeAsync(200);
+    mockedGenerateLovelaceDashboardStrategy.mockClear();
+
+    cancelSettings(el);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(session(el)).toBeUndefined();
+    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenCalledTimes(1);
+    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenLastCalledWith(
+      homeStrategy(saved),
+      el.hass
+    );
+  });
+
+  it("regenerates once from the saved config on cancel after an edit", async () => {
+    const el = createPanel();
+    editHome(el);
+    changeDraft(el, { show_welcome_message: false });
+
+    // Cancelled before the edit's debounced regeneration fires
+    cancelSettings(el);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenCalledTimes(1);
+    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenLastCalledWith(
+      homeStrategy({}),
+      el.hass
+    );
+  });
+
+  it("does not regenerate on cancel without any edit", async () => {
+    const el = createPanel();
+    editHome(el);
+
+    cancelSettings(el);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(session(el)).toBeUndefined();
+    expect(mockedGenerateLovelaceDashboardStrategy).not.toHaveBeenCalled();
+  });
+
+  it("discards a draft regeneration that resolves after cancel", async () => {
     const el = createPanel();
 
-    const config: HomeFrontendSystemData = { hide_welcome_message: true };
-    mockedGenerateLovelaceDashboardStrategy.mockResolvedValueOnce({
-      views: [],
-    } as any);
+    const draftGeneration = deferred<{ views: unknown[] }>();
+    mockedGenerateLovelaceDashboardStrategy.mockReturnValueOnce(
+      draftGeneration.promise as any
+    );
 
-    setPreviewConfig(el, config);
-    await setLovelace(el);
+    editHome(el);
+    changeDraft(el, { show_welcome_message: false });
+    // The edit's regeneration starts and takes a while.
+    await vi.advanceTimersByTimeAsync(200);
+
+    cancelSettings(el);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(el._lovelace?.config).toEqual({ views: [] });
+
+    // The cancelled draft's result comes back last.
+    draftGeneration.resolve({ views: ["draft"] });
+    await vi.advanceTimersByTimeAsync(0);
 
     expect(el._lovelace?.config).toEqual({ views: [] });
   });
 
-  it("passes the previewed draft to strategy generation, then falls back to the saved config once the preview is cleared", async () => {
+  it("never applies an earlier draft's regeneration once the draft changed again", async () => {
     const el = createPanel();
-    mockedGenerateLovelaceDashboardStrategy.mockResolvedValue({
-      views: [],
-    } as any);
 
-    setPreviewConfig(el, { hide_welcome_message: true });
-    await setLovelace(el);
-
-    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenLastCalledWith(
-      {
-        strategy: {
-          type: "home",
-          alert_entities: undefined,
-          favorite_entities: undefined,
-          home_panel: true,
-          hide_welcome_message: true,
-          hide_suggested_entities: undefined,
-          shortcuts: undefined,
-        },
-      },
-      el.hass
+    const firstDraft = deferred<{ views: unknown[] }>();
+    mockedGenerateLovelaceDashboardStrategy.mockReturnValueOnce(
+      firstDraft.promise as any
     );
 
-    setPreviewConfig(el, undefined);
-    await setLovelace(el);
-
-    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenLastCalledWith(
-      {
-        strategy: {
-          type: "home",
-          alert_entities: undefined,
-          favorite_entities: undefined,
-          home_panel: true,
-          hide_welcome_message: undefined,
-          hide_suggested_entities: undefined,
-          shortcuts: undefined,
-        },
-      },
-      el.hass
-    );
-  });
-
-  it("cancels a pending preview debounce so a fast save does not trigger a redundant extra regeneration", async () => {
-    const el = createPanel();
-    mockedGenerateLovelaceDashboardStrategy.mockResolvedValue({
-      views: [],
-    } as any);
-    mockedSaveFrontendSystemData.mockResolvedValueOnce(undefined);
-
-    // A preview edit schedules the 200ms debounce...
-    setPreviewConfig(el, { hide_welcome_message: true });
-
-    // ...but the user saves before it fires.
-    await saveConfig(el, { hide_welcome_message: true });
-    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenCalledTimes(1);
-
-    // Advancing past the debounce's original window must not add a second,
-    // now-redundant regeneration.
+    editHome(el);
+    changeDraft(el, { show_welcome_message: false });
     await vi.advanceTimersByTimeAsync(200);
-    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenCalledTimes(1);
+
+    // A second edit, before the first one's regeneration resolves
+    changeDraft(el, { show_suggested_entities: false });
+    firstDraft.resolve({ views: ["first draft"] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(el._lovelace).toBeUndefined();
+
+    await vi.advanceTimersByTimeAsync(200);
+    expect(el._lovelace?.config).toEqual({ views: [] });
   });
 
-  it("reports failure without touching the dashboard when the backend save rejects", async () => {
+  it("saves the draft, closes and regenerates only once", async () => {
+    const el = createPanel({ welcome_banner_dismissed: true });
+    mockedSaveFrontendSystemData.mockResolvedValueOnce(undefined);
+    editHome(el);
+    // Saved before the edit's debounced regeneration fires
+    changeDraft(el, { show_welcome_message: false });
+
+    await saveSettings(el);
+    await vi.advanceTimersByTimeAsync(200);
+
+    const expected = {
+      welcome_banner_dismissed: true,
+      hide_welcome_message: true,
+    };
+    expect(mockedSaveFrontendSystemData).toHaveBeenCalledTimes(1);
+    expect(mockedSaveFrontendSystemData.mock.calls[0][2]).toEqual(
+      expect.objectContaining(expected)
+    );
+    expect(priv(el)._config).toEqual(expect.objectContaining(expected));
+    expect(session(el)).toBeUndefined();
+    expect(priv(el)._submitting).toBe(false);
+    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenCalledTimes(1);
+    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenLastCalledWith(
+      homeStrategy({ hide_welcome_message: true }),
+      el.hass
+    );
+  });
+
+  it("stays open with the draft intact when the save fails", async () => {
     const el = createPanel();
     mockedSaveFrontendSystemData.mockRejectedValueOnce(new Error("boom"));
+    editHome(el);
+    changeDraft(el, { show_welcome_message: false });
+    const before = session(el);
 
-    const success = await saveConfig(el, { hide_welcome_message: true });
+    await saveSettings(el);
 
-    expect(success).toBe(false);
-    expect(mockedGenerateLovelaceDashboardStrategy).not.toHaveBeenCalled();
+    expect(session(el)).toBe(before);
+    expect(session(el)!.draft.show_welcome_message).toBe(false);
+    expect(priv(el)._submitting).toBe(false);
+    expect(priv(el)._config).toEqual({});
   });
 
-  it("does not regenerate when previewConfig is called with the already-current value", async () => {
+  it("refuses to cancel, edit or save again while a save is in flight", async () => {
     const el = createPanel();
-    mockedGenerateLovelaceDashboardStrategy.mockResolvedValue({
-      views: [],
-    } as any);
+    const pending = deferred<undefined>();
+    mockedSaveFrontendSystemData.mockReturnValueOnce(pending.promise as any);
+    editHome(el);
+    changeDraft(el, { show_welcome_message: false });
+    const before = session(el);
 
-    // Opening and cancelling the dialog without any edit still calls
-    // previewConfig(undefined), which is already the current value.
-    setPreviewConfig(el, undefined);
+    const saving = saveSettings(el);
+    expect(priv(el)._submitting).toBe(true);
 
-    // Nothing should have been scheduled: advancing past the debounce
-    // window must not trigger a regeneration.
-    await vi.advanceTimersByTimeAsync(200);
-    expect(mockedGenerateLovelaceDashboardStrategy).not.toHaveBeenCalled();
+    cancelSettings(el);
+    changeDraft(el, { show_suggested_entities: false });
+    await saveSettings(el);
+
+    expect(session(el)).toBe(before);
+    expect(mockedSaveFrontendSystemData).toHaveBeenCalledTimes(1);
+
+    pending.resolve(undefined);
+    await saving;
+    expect(session(el)).toBeUndefined();
   });
 
-  it("ignores a content-equal preview in a new object without discarding the in-flight post-save refresh", async () => {
+  it("does not let a save close a later session", async () => {
     const el = createPanel();
+    const pending = deferred<undefined>();
+    mockedSaveFrontendSystemData.mockReturnValueOnce(pending.promise as any);
+    editHome(el);
+    changeDraft(el, { show_welcome_message: false });
+    const saving = saveSettings(el);
 
-    const inFlight = deferred<{ views: unknown[] }>();
-    mockedGenerateLovelaceDashboardStrategy.mockReturnValueOnce(
-      inFlight.promise as any
+    // Leaving the page drops the session even during the save...
+    priv(el)._closeSettings();
+    // ...but the settings cannot open again until the save is done.
+    editHome(el);
+    expect(session(el)).toBeUndefined();
+
+    pending.resolve(undefined);
+    await saving;
+    editHome(el);
+    expect(session(el)).toBeDefined();
+    expect(priv(el)._config).toEqual(
+      expect.objectContaining({ hide_welcome_message: true })
     );
-    mockedSaveFrontendSystemData.mockResolvedValueOnce(undefined);
-
-    // A stale save: a newer draft is previewed while an older one is saved,
-    // so the preview stays and the save starts its immediate refresh.
-    setPreviewConfig(el, {
-      hide_welcome_message: true,
-      hide_suggested_entities: true,
-    });
-    await saveConfig(el, { hide_welcome_message: true });
-    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenCalledTimes(1);
-
-    // The newer draft content is pushed again, as a new object with the
-    // same content.
-    setPreviewConfig(el, {
-      hide_welcome_message: true,
-      hide_suggested_entities: true,
-    });
-
-    inFlight.resolve({ views: ["current"] });
-    await vi.advanceTimersByTimeAsync(0);
-    // The in-flight refresh was not invalidated...
-    expect(el._lovelace?.config).toEqual({ views: ["current"] });
-
-    // ...and no extra one was scheduled behind it.
-    await vi.advanceTimersByTimeAsync(200);
-    expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenCalledTimes(1);
   });
 
-  it("clears _previewConfig after a save whose content matches it, so a reopened dialog does not inherit a stale draft", async () => {
+  it("cancels a pending draft debounce before a locale-driven regeneration", async () => {
     const el = createPanel();
-    mockedGenerateLovelaceDashboardStrategy.mockResolvedValue({
-      views: [],
-    } as any);
-    mockedSaveFrontendSystemData.mockResolvedValueOnce(undefined);
-
-    const draft: HomeFrontendSystemData = { hide_welcome_message: true };
-    setPreviewConfig(el, draft);
-
-    // The saved config is content-equal to the current preview (e.g. Save
-    // was clicked on that exact draft), but built via a separate
-    // buildHomeConfig() call, so it is a different object reference.
-    await saveConfig(el, { hide_welcome_message: true });
-
-    expect(getPreviewConfig(el)).toBeUndefined();
-  });
-
-  it("preserves _previewConfig after a save whose content differs from it, keeping a newer live draft", async () => {
-    const el = createPanel();
-    mockedGenerateLovelaceDashboardStrategy.mockResolvedValue({
-      views: [],
-    } as any);
-    mockedSaveFrontendSystemData.mockResolvedValueOnce(undefined);
-
-    // A newer edit is pushed to the preview after the save's config was
-    // captured but before it resolves (mirrors dialog-edit-home's stale
-    // save handling, which keeps the dialog open with the newer draft).
-    const saved: HomeFrontendSystemData = { hide_welcome_message: true };
-    const newerDraft: HomeFrontendSystemData = {
-      hide_welcome_message: true,
-      hide_suggested_entities: true,
-    };
-    setPreviewConfig(el, newerDraft);
-
-    await saveConfig(el, saved);
-
-    expect(getPreviewConfig(el)).toEqual(newerDraft);
-  });
-
-  it("cancels a pending preview debounce before a locale-driven regeneration", async () => {
-    const el = createPanel();
-    mockedGenerateLovelaceDashboardStrategy.mockResolvedValue({
-      views: [],
-    } as any);
     (el as unknown as Record<"hasUpdated", boolean>).hasUpdated = true;
+    editHome(el);
 
-    // A preview edit schedules the 200ms debounce...
-    setPreviewConfig(el, { hide_welcome_message: true });
+    // An edit schedules the 200ms debounce...
+    changeDraft(el, { show_welcome_message: false });
 
     // ...but the locale changes before it fires.
     const oldHass = el.hass;
@@ -386,6 +416,20 @@ describe("ha-panel-home stale strategy regeneration guard", () => {
     // now-redundant regeneration.
     await vi.advanceTimersByTimeAsync(200);
     expect(mockedGenerateLovelaceDashboardStrategy).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops the draft when the route changes", async () => {
+    const el = createPanel();
+    (el as unknown as Record<"hasUpdated", boolean>).hasUpdated = true;
+    const route = { prefix: "/home", path: "/overview" };
+    (el as unknown as Private).route = route;
+    editHome(el);
+    changeDraft(el, { show_welcome_message: false });
+
+    (el as unknown as Private).route = { prefix: "/home", path: "/areas-x" };
+    el.willUpdate(new Map<string, unknown>([["route", route]]));
+
+    expect(session(el)).toBeUndefined();
   });
 });
 
@@ -464,5 +508,64 @@ describe("home panel welcome banner", () => {
     expect(saved.favorite_entities).toEqual(STORED.favorite_entities);
     expect(saved.shortcuts).toEqual(STORED.shortcuts);
     expect(saved.welcome_banner_dismissed).toBe(true);
+  });
+});
+
+describe("home panel settings sidebar", () => {
+  // Without the welcome banner, which is not under test here
+  const loadConfig = async () => ({
+    ...STORED,
+    welcome_banner_dismissed: true,
+  });
+
+  it("reports unsaved changes while editing, and drops them when the panel is left", async () => {
+    mockedGenerateLovelaceDashboardStrategy.mockResolvedValue({
+      views: [],
+    } as any);
+    const panel = await openPanel(loadConfig);
+    await panel.updateComplete;
+    const el = panel as unknown as TestPanelHome;
+
+    editHome(el);
+    await panel.updateComplete;
+    expect(window.isDirtyState).toBe(false);
+
+    changeDraft(el, { show_welcome_message: false });
+    await panel.updateComplete;
+    const sidebar = panel.shadowRoot!.querySelector("home-settings-sidebar")!;
+    await sidebar.updateComplete;
+    expect(window.isDirtyState).toBe(true);
+
+    // Navigating to another panel only disconnects this cached one.
+    panel.remove();
+
+    expect(session(el)).toBeUndefined();
+    expect(window.isDirtyState).toBe(false);
+  });
+
+  it("disables the form while a save is in flight", async () => {
+    mockedGenerateLovelaceDashboardStrategy.mockResolvedValue({
+      views: [],
+    } as any);
+    const pending = deferred<undefined>();
+    mockedSaveFrontendSystemData.mockReturnValueOnce(pending.promise as any);
+    const panel = await openPanel(loadConfig);
+    await panel.updateComplete;
+    const el = panel as unknown as TestPanelHome;
+
+    editHome(el);
+    changeDraft(el, { show_welcome_message: false });
+    const saving = saveSettings(el);
+    await panel.updateComplete;
+
+    const form = () =>
+      panel.shadowRoot!.querySelector("home-settings-form") as
+        (HTMLElement & { disabled: boolean }) | null;
+    expect(form()!.disabled).toBe(true);
+
+    pending.resolve(undefined);
+    await saving;
+    await panel.updateComplete;
+    expect(form()).toBeNull();
   });
 });

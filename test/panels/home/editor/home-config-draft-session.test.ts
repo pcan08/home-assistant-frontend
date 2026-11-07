@@ -3,8 +3,8 @@ import {
   resolveShortcutItems,
   type ShortcutItem,
 } from "../../../../src/data/home_shortcuts";
-import type { EditorState } from "../../../../src/panels/home/dialogs/dialog-edit-home";
-import { HomeConfigDraftSession } from "../../../../src/panels/home/dialogs/home-config-draft-session";
+import { HomeConfigDraftSession } from "../../../../src/panels/home/editor/home-config-draft-session";
+import type { EditorState } from "../../../../src/panels/home/editor/home-config-editor-state";
 
 const stateA: EditorState = {
   favorite_entities: [],
@@ -39,50 +39,6 @@ describe("HomeConfigDraftSession", () => {
       .withDraft(stateA);
     expect(session.generation).toBe(2);
     expect(session.isDirty).toBe(false);
-  });
-
-  it("marks a non-stale save as fully applied: draft becomes the new baseline", () => {
-    const session = HomeConfigDraftSession.start(stateA).withDraft(stateB);
-    const { session: updated, stale } = session.withSaved(
-      session.generation,
-      stateB
-    );
-    expect(stale).toBe(false);
-    expect(updated.draft).toEqual(stateB);
-    expect(updated.isDirty).toBe(false);
-  });
-
-  it("marks a save as stale when the draft changed again after it started, keeping the newer draft", () => {
-    const session = HomeConfigDraftSession.start(stateA).withDraft(stateB);
-    const savedGeneration = session.generation;
-    const savedDraft = session.draft;
-    const stateC: EditorState = { ...stateA, show_suggested_entities: false };
-    const editedDuringSave = session.withDraft(stateC);
-
-    const { session: updated, stale } = editedDuringSave.withSaved(
-      savedGeneration,
-      savedDraft
-    );
-    expect(stale).toBe(true);
-    // The live draft is untouched by the stale completion...
-    expect(updated.draft).toEqual(stateC);
-    // ...but the baseline rebases to what was actually persisted, so
-    // isDirty reflects "does the screen differ from what's truly saved".
-    expect(updated.isDirty).toBe(true);
-  });
-
-  it("reports not dirty after a stale save if the current draft happens to match what was persisted", () => {
-    const session = HomeConfigDraftSession.start(stateA).withDraft(stateB);
-    const savedGeneration = session.generation;
-    const savedDraft = session.draft;
-    const editedBackDuringSave = session.withDraft(stateA).withDraft(stateB);
-
-    const { session: updated, stale } = editedBackDuringSave.withSaved(
-      savedGeneration,
-      savedDraft
-    );
-    expect(stale).toBe(true);
-    expect(updated.isDirty).toBe(false);
   });
 
   it("compares array fields by content, not by reference (a round-trip edit produces a new array)", () => {
@@ -162,24 +118,6 @@ describe("HomeConfigDraftSession", () => {
         draft
       );
       expect(session.draft).toBe(draft);
-    });
-
-    it("reports a stale save as clean when the newer draft only differs in shape", () => {
-      const session = HomeConfigDraftSession.start(withShortcuts([])).withDraft(
-        { ...withShortcuts([]), show_welcome_message: false }
-      );
-      const savedGeneration = session.generation;
-      const savedDraft = session.draft;
-      const shapeOnly = session
-        .withDraft({ ...savedDraft, shortcuts: setHidden(true) })
-        .withDraft({ ...savedDraft, shortcuts: setHidden(undefined) });
-
-      const { session: updated, stale } = shapeOnly.withSaved(
-        savedGeneration,
-        savedDraft
-      );
-      expect(stale).toBe(true);
-      expect(updated.isDirty).toBe(false);
     });
   });
 });
