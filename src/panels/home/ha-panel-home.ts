@@ -437,9 +437,17 @@ class PanelHome extends DirtyStateProviderMixin()(SubscribeMixin(LitElement)) {
         return;
       }
     }
-    // Not focusable otherwise; -1 keeps it out of the tab order.
-    this.tabIndex = -1;
-    this.focus();
+    // Not focusable otherwise, and only until the focus leaves the panel:
+    // clicking the dashboard later must not focus the whole panel. Dropping
+    // it any sooner, with the focus moved into the dashboard, would send the
+    // focus to the page body. -1 keeps it out of the tab order meanwhile.
+    if (!this.hasAttribute("tabindex")) {
+      this.tabIndex = -1;
+      this.addEventListener("blur", () => this.removeAttribute("tabindex"), {
+        once: true,
+      });
+    }
+    this.focus({ preventScroll: true });
   }
 
   private _settingsClosed(): void {
@@ -720,17 +728,6 @@ class PanelHome extends DirtyStateProviderMixin()(SubscribeMixin(LitElement)) {
       --view-container-margin-inline-start: var(--home-settings-width);
     }
     .banner {
-      transition:
-        margin-inline-start var(--ha-animation-duration-normal) ease,
-        margin-inline-end var(--ha-animation-duration-normal) ease;
-    }
-    .banner.settings-end {
-      margin-inline-end: var(--home-settings-width);
-    }
-    .banner.settings-start {
-      margin-inline-start: var(--home-settings-width);
-    }
-    .banner {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
@@ -743,6 +740,15 @@ class PanelHome extends DirtyStateProviderMixin()(SubscribeMixin(LitElement)) {
       left: var(--ha-sidebar-width, 0px);
       right: 0;
       z-index: 5;
+      transition:
+        margin-inline-start var(--ha-animation-duration-normal) ease,
+        margin-inline-end var(--ha-animation-duration-normal) ease;
+    }
+    .banner.settings-end {
+      margin-inline-end: var(--home-settings-width);
+    }
+    .banner.settings-start {
+      margin-inline-start: var(--home-settings-width);
     }
     .banner-content {
       display: flex;

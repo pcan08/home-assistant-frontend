@@ -3,6 +3,7 @@ import { mdiClose } from "@mdi/js";
 import type { PropertyValues } from "lit";
 import { css, html, LitElement } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
+import { ifDefined } from "lit/directives/if-defined";
 import { consume } from "../../../common/decorators/consume";
 import { fireEvent } from "../../../common/dom/fire_event";
 import "../../../components/ha-button";
@@ -68,11 +69,13 @@ export class HomeSettingsSidebar extends LitElement {
   }
 
   private _renderContent() {
+    // When narrow, the bottom sheet is already the region named after the
+    // title: naming this one as well would announce it twice.
     return html`
       <section
         class="container"
         tabindex="-1"
-        aria-labelledby="title"
+        aria-labelledby=${ifDefined(this.narrow ? undefined : "title")}
         @keydown=${this._keyDown}
       >
         <div class="header">
