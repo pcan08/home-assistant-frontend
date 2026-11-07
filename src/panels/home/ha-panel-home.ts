@@ -4,6 +4,7 @@ import type { CSSResultGroup, PropertyValues } from "lit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators";
 import { classMap } from "lit/directives/class-map";
+import { keyed } from "lit/directives/keyed";
 import { styleMap } from "lit/directives/style-map";
 import { atLeastVersion } from "../../common/config/version";
 import { deepActiveElement } from "../../common/dom/deep-active-element";
@@ -98,6 +99,10 @@ class PanelHome extends SubscribeMixin(LitElement) {
 
   // Where the focus was when the settings opened, to bring it back on close
   private _settingsOpener?: Element | null;
+
+  // Changes with each session, which gets a side panel of its own: one still
+  // sliding out is not reused, so the new one slides in and takes the focus.
+  private _settingsKey = 0;
 
   public hassSubscribe() {
     return [
@@ -323,6 +328,7 @@ class PanelHome extends SubscribeMixin(LitElement) {
     }
     this._settingsOpener = deepActiveElement();
     this._closingSession = undefined;
+    this._settingsKey++;
     this._session = HomeConfigDraftSession.start(
       editorStateFromConfig(this._config ?? {})
     );
@@ -529,27 +535,30 @@ class PanelHome extends SubscribeMixin(LitElement) {
       ></hui-root>
       ${
         shownSession
-          ? html`
-              <home-settings-sidebar
-                ?inert=${!session}
-                .closing=${!session}
-                .narrow=${this.narrow}
-                .placement=${SETTINGS_PANEL_PLACEMENT}
-                .dirty=${session?.isDirty ?? false}
-                .submitting=${this._submitting}
-                @home-settings-cancel=${this._cancelSettings}
-                @home-settings-save=${this._saveSettings}
-                @home-settings-closed=${this._settingsClosed}
-                @bottom-sheet-resized=${this._settingsSheetResized}
-              >
-                <home-settings-form
-                  .hass=${this.hass}
-                  .draft=${shownSession.draft}
-                  .disabled=${this._submitting || !session}
-                  @value-changed=${this._settingsChanged}
-                ></home-settings-form>
-              </home-settings-sidebar>
-            `
+          ? keyed(
+              this._settingsKey,
+              html`
+                <home-settings-sidebar
+                  ?inert=${!session}
+                  .closing=${!session}
+                  .narrow=${this.narrow}
+                  .placement=${SETTINGS_PANEL_PLACEMENT}
+                  .dirty=${session?.isDirty ?? false}
+                  .submitting=${this._submitting}
+                  @home-settings-cancel=${this._cancelSettings}
+                  @home-settings-save=${this._saveSettings}
+                  @home-settings-closed=${this._settingsClosed}
+                  @bottom-sheet-resized=${this._settingsSheetResized}
+                >
+                  <home-settings-form
+                    .hass=${this.hass}
+                    .draft=${shownSession.draft}
+                    .disabled=${this._submitting || !session}
+                    @value-changed=${this._settingsChanged}
+                  ></home-settings-form>
+                </home-settings-sidebar>
+              `
+            )
           : nothing
       }
     `;

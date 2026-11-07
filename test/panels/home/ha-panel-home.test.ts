@@ -576,6 +576,49 @@ describe("home panel settings sidebar", () => {
     expect(sidebar()).toBeNull();
   });
 
+  it("gives a session reopened during the slide out a side panel of its own", async () => {
+    mockedGenerateLovelaceDashboardStrategy.mockResolvedValue({
+      views: [],
+    } as any);
+    const panel = await openPanel(loadConfig);
+    await panel.updateComplete;
+    const el = panel as unknown as TestPanelHome;
+    const sidebar = () =>
+      panel.shadowRoot!.querySelector("home-settings-sidebar")!;
+
+    editHome(el);
+    await panel.updateComplete;
+    const first = sidebar();
+    // Edits keep the same side panel.
+    changeDraft(el, { show_welcome_message: false });
+    await panel.updateComplete;
+    expect(sidebar()).toBe(first);
+
+    // A slide out that is still running
+    const getAnimations = vi
+      .spyOn(Element.prototype, "getAnimations")
+      .mockReturnValue([{ finished: deferred<undefined>().promise }] as any);
+    try {
+      cancelSettings(el);
+      await panel.updateComplete;
+      expect(first.closing).toBe(true);
+
+      editHome(el);
+      await panel.updateComplete;
+    } finally {
+      getAnimations.mockRestore();
+    }
+    const second = sidebar();
+    expect(second).not.toBe(first);
+    expect(second.closing).toBe(false);
+    await second.updateComplete;
+    await vi.waitFor(() =>
+      expect(second.shadowRoot!.activeElement).toBe(
+        second.shadowRoot!.querySelector(".container")
+      )
+    );
+  });
+
   it("disables the form while a save is in flight", async () => {
     mockedGenerateLovelaceDashboardStrategy.mockResolvedValue({
       views: [],

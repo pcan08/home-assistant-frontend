@@ -97,4 +97,45 @@ describe("home-settings-sidebar", () => {
     el.remove();
     expect(window.isDirtyState).toBe(false);
   });
+
+  it("reports the end of the slide out, not of a slide in it cancelled", async () => {
+    const slide = () => {
+      let settle!: () => void;
+      const finished = new Promise<void>((resolve) => {
+        settle = resolve;
+      });
+      return { finished, settle };
+    };
+    const slideIn = slide();
+    const slideOut = slide();
+    const getAnimations = vi
+      .spyOn(Element.prototype, "getAnimations")
+      .mockReturnValue([slideIn] as unknown as Animation[]);
+    const transitions: boolean[] = [];
+    const onTransition = (ev: Event) =>
+      transitions.push((ev as CustomEvent<{ active: boolean }>).detail.active);
+    window.addEventListener("hass-layout-transition", onTransition);
+    try {
+      const { el } = await createSidebar();
+      const closed = vi.fn();
+      el.addEventListener("home-settings-closed", closed);
+
+      // Closed before the slide in is over: the slide out cancels it.
+      getAnimations.mockReturnValue([slideOut] as unknown as Animation[]);
+      el.closing = true;
+      await el.updateComplete;
+      slideIn.settle();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(closed).not.toHaveBeenCalled();
+      expect(transitions).toEqual([true]);
+
+      slideOut.settle();
+      await vi.waitFor(() => expect(closed).toHaveBeenCalledTimes(1));
+      expect(transitions).toEqual([true, false]);
+    } finally {
+      window.removeEventListener("hass-layout-transition", onTransition);
+      getAnimations.mockRestore();
+    }
+  });
 });

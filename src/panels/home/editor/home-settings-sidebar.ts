@@ -129,6 +129,9 @@ export class HomeSettingsSidebar extends DirtyStateProviderMixin()(LitElement) {
     this._slideDone();
   }
 
+  // Each slide in or out takes over from the one before it.
+  private _slideCount = 0;
+
   private async _focusContainer(): Promise<void> {
     // The bottom sheet's content cannot take the focus until its first
     // render has shown it.
@@ -157,13 +160,21 @@ export class HomeSettingsSidebar extends DirtyStateProviderMixin()(LitElement) {
   }
 
   private async _slideDone(): Promise<void> {
+    const slide = ++this._slideCount;
+    const closing = this.closing;
     const animations = this.narrow ? [] : this.getAnimations();
     if (animations.length) {
       this._setLayoutTransition(true);
       await Promise.allSettled(animations.map((a) => a.finished));
+      // Closed during the slide in: the slide out, which cancelled it, now
+      // holds the layout transition and reports the end.
+      if (slide !== this._slideCount) {
+        return;
+      }
       this._setLayoutTransition(false);
     }
-    if (this.closing) {
+    // Removed meanwhile: there is nothing left to close.
+    if (closing && this.isConnected) {
       fireEvent(this, "home-settings-closed");
     }
   }
