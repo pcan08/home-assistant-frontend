@@ -350,8 +350,10 @@ class PanelHome extends SubscribeMixin(LitElement) {
     }
     this._session = session.withDraft(ev.detail.value);
     // Preview at once: the debounce only batches registry updates, and
-    // regenerating now also covers one still pending. _setLovelace()
-    // invalidates any older in-flight generation synchronously.
+    // regenerating now also covers one still pending. Its area redirect
+    // never applies here, as editing only happens on the overview.
+    // _setLovelace() invalidates any older in-flight generation
+    // synchronously.
     this._debounceRegenerateStrategy.cancel();
     this._setLovelace();
   }

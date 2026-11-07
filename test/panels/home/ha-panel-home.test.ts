@@ -260,7 +260,7 @@ describe("ha-panel-home settings editing", () => {
     editHome(el);
     changeDraft(el, { favorite_entities: ["light.a", "light.b"] });
     changeDraft(el, { favorite_entities: ["light.a"] });
-    await vi.advanceTimersByTimeAsync(200);
+    await vi.advanceTimersByTimeAsync(0);
     mockedGenerateLovelaceDashboardStrategy.mockClear();
 
     cancelSettings(el);
@@ -276,8 +276,11 @@ describe("ha-panel-home settings editing", () => {
 
   it("regenerates once from the saved config on cancel after an edit", async () => {
     const el = createPanel();
+    el.hasUpdated = true;
     editHome(el);
     changeDraft(el, { show_welcome_message: false });
+    // A registry change still waiting for its debounce when cancelling
+    changeAreaRegistry(el);
     mockedGenerateLovelaceDashboardStrategy.mockClear();
 
     cancelSettings(el);
@@ -349,9 +352,12 @@ describe("ha-panel-home settings editing", () => {
 
   it("saves the draft, closes and regenerates only once", async () => {
     const el = createPanel({ welcome_banner_dismissed: true });
+    el.hasUpdated = true;
     mockedSaveFrontendSystemData.mockResolvedValueOnce(undefined);
     editHome(el);
     changeDraft(el, { show_welcome_message: false });
+    // A registry change still waiting for its debounce when saving
+    changeAreaRegistry(el);
     mockedGenerateLovelaceDashboardStrategy.mockClear();
 
     await saveSettings(el);
