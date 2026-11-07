@@ -10,7 +10,6 @@ import "../../../components/ha-icon-button";
 import "../../../components/ha-snap-bottom-sheet";
 import type { HaSnapBottomSheet } from "../../../components/ha-snap-bottom-sheet";
 import { internationalizationContext } from "../../../data/context";
-import { DirtyStateProviderMixin } from "../../../mixins/dirty-state-provider-mixin";
 
 export type HomeSettingsPlacement = "start" | "end";
 
@@ -30,7 +29,7 @@ const COLLAPSED_SHEET_HEIGHT = 68;
  * @fires bottom-sheet-resized - Relayed from the bottom sheet when `narrow`
  */
 @customElement("home-settings-sidebar")
-export class HomeSettingsSidebar extends DirtyStateProviderMixin()(LitElement) {
+export class HomeSettingsSidebar extends LitElement {
   @property({ type: Boolean, reflect: true }) public narrow = false;
 
   @property({ type: Boolean }) public dirty = false;
@@ -50,12 +49,6 @@ export class HomeSettingsSidebar extends DirtyStateProviderMixin()(LitElement) {
   @query(".container") private _container?: HTMLElement;
 
   @query("ha-snap-bottom-sheet") private _sheet?: HaSnapBottomSheet;
-
-  // The draft lives in the host, so this only reports it to block automatic
-  // frontend reloads while it has unsaved changes.
-  protected get _blocksReload(): boolean {
-    return this.dirty;
-  }
 
   protected render() {
     const content = this._renderContent();

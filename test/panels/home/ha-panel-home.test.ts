@@ -576,6 +576,67 @@ describe("home panel settings sidebar", () => {
     expect(sidebar()).toBeNull();
   });
 
+  it("keeps the unsaved changes blocking reloads while a hidden tab has the panel off the page", async () => {
+    mockedGenerateLovelaceDashboardStrategy.mockResolvedValue({
+      views: [],
+    } as any);
+    const panel = await openPanel(loadConfig);
+    await panel.updateComplete;
+    const el = panel as unknown as TestPanelHome;
+    editHome(el);
+    changeDraft(el, { show_welcome_message: false });
+    await panel.updateComplete;
+    expect(window.isDirtyState).toBe(true);
+
+    // A tab hidden for a while has its panel disconnected, draft kept.
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    const host = panel.parentElement!;
+    try {
+      panel.remove();
+      expect(session(el)).toBeDefined();
+      expect(window.isDirtyState).toBe(true);
+    } finally {
+      hidden.mockRestore();
+    }
+
+    // Back on the page, until the draft goes
+    host.append(panel);
+    await panel.updateComplete;
+    expect(window.isDirtyState).toBe(true);
+    cancelSettings(el);
+    await panel.updateComplete;
+    expect(window.isDirtyState).toBe(false);
+  });
+
+  it("does not keep reloads blocked once the draft goes off the page", async () => {
+    mockedGenerateLovelaceDashboardStrategy.mockResolvedValue({
+      views: [],
+    } as any);
+    const pending = deferred<undefined>();
+    mockedSaveFrontendSystemData.mockReturnValueOnce(pending.promise as any);
+    const panel = await openPanel(loadConfig);
+    await panel.updateComplete;
+    const el = panel as unknown as TestPanelHome;
+    editHome(el);
+    changeDraft(el, { show_welcome_message: false });
+    const saving = saveSettings(el);
+    await panel.updateComplete;
+
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    try {
+      panel.remove();
+      expect(window.isDirtyState).toBe(true);
+      // The save ends while the tab is still hidden.
+      pending.resolve(undefined);
+      await saving;
+      await panel.updateComplete;
+      expect(session(el)).toBeUndefined();
+      expect(window.isDirtyState).toBe(false);
+    } finally {
+      hidden.mockRestore();
+    }
+  });
+
   it("gives a session reopened during the slide out a side panel of its own", async () => {
     mockedGenerateLovelaceDashboardStrategy.mockResolvedValue({
       views: [],
