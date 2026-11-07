@@ -44,8 +44,7 @@ const publishGlobalDirtyState = (): void => {
  * registry editor) can coexist without overwriting each other.
  *
  * Connected providers contribute to the global dirty state. It remains dirty
- * while any provider has unsaved changes. A disconnected provider no longer
- * counts, unless it opts in with `_blocksReloadWhileDisconnected`.
+ * while any provider has unsaved changes.
  *
  * `isEffectiveDirty` runs the same comparison, but first passes each slice's
  * initial and current value through the optional `effectiveNormalize` function
@@ -148,16 +147,6 @@ export const DirtyStateProviderMixin =
         return this.isDirtyState;
       }
 
-      /**
-       * Whether `_blocksReload` stays published while this provider is
-       * disconnected. Off by default: taking a provider off the page drops
-       * its contribution. Turn it on for an element that keeps its unsaved
-       * changes while off the page, such as a cached panel in a hidden tab.
-       * It must then update once those changes are gone, even while
-       * disconnected, so `_blocksReload` turns false and is published.
-       */
-      protected readonly _blocksReloadWhileDisconnected: boolean = false;
-
       public connectedCallback(): void {
         super.connectedCallback();
         connectedDirtyStateProviders.set(this, this._blocksReload);
@@ -171,11 +160,7 @@ export const DirtyStateProviderMixin =
       }
 
       public disconnectedCallback(): void {
-        if (this._blocksReloadWhileDisconnected && this._blocksReload) {
-          connectedDirtyStateProviders.set(this, true);
-        } else {
-          connectedDirtyStateProviders.delete(this);
-        }
+        connectedDirtyStateProviders.delete(this);
         publishGlobalDirtyState();
         super.disconnectedCallback();
       }

@@ -86,6 +86,18 @@ describe("home-settings-sidebar", () => {
     expect(sheet().dismissable).toBe(false);
   });
 
+  it("blocks automatic reloads only while the draft has unsaved changes", async () => {
+    const { el } = await createSidebar();
+    expect(window.isDirtyState).toBe(false);
+
+    el.dirty = true;
+    await el.updateComplete;
+    expect(window.isDirtyState).toBe(true);
+
+    el.remove();
+    expect(window.isDirtyState).toBe(false);
+  });
+
   it("reports the end of the slide out, not of a slide in it cancelled", async () => {
     const slide = () => {
       let settle!: () => void;

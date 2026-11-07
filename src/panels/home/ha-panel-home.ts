@@ -24,7 +24,6 @@ import {
   type SecurityFrontendSystemData,
 } from "../../data/frontend";
 import type { LovelaceDashboardStrategyConfig } from "../../data/lovelace/config/types";
-import { DirtyStateProviderMixin } from "../../mixins/dirty-state-provider-mixin";
 import { SubscribeMixin } from "../../mixins/subscribe-mixin";
 import { mdiHomeAssistant } from "../../resources/home-assistant-logo-svg";
 import type {
@@ -63,7 +62,7 @@ import type { HomeSettingsPlacement } from "./editor/home-settings-sidebar";
 const SETTINGS_PANEL_PLACEMENT: HomeSettingsPlacement = "end";
 
 @customElement("ha-panel-home")
-class PanelHome extends DirtyStateProviderMixin()(SubscribeMixin(LitElement)) {
+class PanelHome extends SubscribeMixin(LitElement) {
   @property({ attribute: false }) public hass!: HomeAssistant;
 
   @property({ type: Boolean, reflect: true }) public narrow = false;
@@ -105,14 +104,6 @@ class PanelHome extends DirtyStateProviderMixin()(SubscribeMixin(LitElement)) {
   // sliding out is not reused, so the new one slides in and takes the focus.
   private _settingsKey = 0;
 
-  // Blocks automatic frontend reloads while the draft has unsaved changes,
-  // also while a hidden tab has this panel off the page.
-  protected get _blocksReload(): boolean {
-    return this._session?.isDirty ?? false;
-  }
-
-  protected readonly _blocksReloadWhileDisconnected = true;
-
   public hassSubscribe() {
     return [
       subscribeFrontendSystemData(
@@ -153,18 +144,19 @@ class PanelHome extends DirtyStateProviderMixin()(SubscribeMixin(LitElement)) {
   }
 
   public disconnectedCallback(): void {
+    super.disconnectedCallback();
     // This panel is cached, so leaving it for another one only disconnects
     // it: drop the draft then, like Cancel. A tab hidden for a while is
-    // disconnected too, and keeps the draft for when it comes back. Its
-    // unsaved changes then still block automatic reloads, which would lose
-    // them (_blocksReloadWhileDisconnected). Done before super, so leaving
-    // the page publishes the dirty state already dropped.
+    // disconnected too, and keeps the draft for when it comes back.
+    // Known limit, shared with the other cached editors (e.g. automations
+    // in the config panel): while disconnected, the settings sidebar no
+    // longer reports unsaved changes, so a frontend update can still reload
+    // the page and lose the draft.
     if (!document.hidden) {
       this._closeSettings();
     }
     // Nothing slides out of a page that is not shown.
     this._closingSession = undefined;
-    super.disconnectedCallback();
   }
 
   private _bannerHeight = new ResizeController(this, {
