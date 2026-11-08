@@ -59,7 +59,7 @@ import "./editor/home-settings-sidebar";
 import type { HomeSettingsPlacement } from "./editor/home-settings-sidebar";
 
 // The side of the dashboard the settings panel sits on, on wide screens.
-const SETTINGS_PANEL_PLACEMENT: HomeSettingsPlacement = "end";
+const SETTINGS_PANEL_PLACEMENT: HomeSettingsPlacement = "start";
 
 @customElement("ha-panel-home")
 class PanelHome extends SubscribeMixin(LitElement) {
